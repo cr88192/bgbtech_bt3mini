@@ -1,0 +1,300 @@
+BGBTech3
+* Lower-cost redesign of BGBTech2
+** Will aim for a similar design.
+* Aim to be lighter/faster and use less memory.
+* Possibly use BJX2 emulator as VM
+** Have option for native DLLs
+** Scripts will be written in C.
+* Things like dialog trees may be stored using XML.
+** The format is "sufficiently not awful" for this.
+* Engine: C + OpenGL
+
+
+=== Conceptual ===
+
+Conceptual Design:
+* Will use low-resolution graphics for block textures.
+** Probably 32x32 or 64x64
+** Will use 256x256 pixel atlases.
+* Sprite graphics.
+** Static entity sprites will use an atlas.
+
+Characters / Mobs
+* Character will probably also use atlases.
+* Nominally 32x64 pixels for character sprites.
+** Some sprites may use 64x64.
+* Each atlas will hold 4 poses and 4 or 8 frames.
+** Top Row: Front View
+** 2nd Row: Back View
+** 3rd Row: Left View
+** 4rd Row: Right View
+* Short annims: Give each anim its own atlas.
+** Unless very short, may pack these.
+** Nominally assume 8 frames/second for animations.
+* Long anims: Split anim across multiple atlases.
+
+Graphics:
+* Will assume DXT1 DDS or similar for texture/atlas storage.
+
+Audio:
+* Likely 8kHz 8-bit mono PCM WAV or similar.
+* Maybe also 8 / 16kHz IMA ADPCM.
+
+Will probably use WAD4 for packaged asset storage.
+
+
+Game Concepts (Working Idea):
+* Walk around in blocky terrain world.
+* Interact with NPCs and similar.
+** TBD if Human or Antro
+* No (or minimal) combat.
+** Aim for "mostly casual" interaction.
+* Menu-driven dialog trees.
+** Portrait, text, menu options.
+* Inventory system:
+** Main inventory
+** Hotbar
+** "Pointy Clicky"
+* Will use a traditional 24-minute day/night cycle.
+** Assume an Earth-like setting (Sun and Moon)
+** Stary night when above ground.
+
+
+=== Region Format ===
+
+Chunks/Regions:
+* Region Size: 128x128x128 blocks (8x8x8 chunks)
+* Chunk Size: 16x16x16
+* Each chunk has a 4b/8b index for each block.
+
+Block:
+* Each block is 32 or 64 bits.
+** (63:32): Reserved for now (MBZ).
+** (31:24): Occlusion Bits (Full Block)
+** (23:20): Sky Light (Transparent) / Attrib (Solid)
+** (19:12): Block Light (Transparent) / Attrib (Solid)
+** (11: 8): Block Atrib / Type (Ext)
+** ( 7: 0): Block Type (Base)
+
+Occlusion Bits:
+* Only apply to Full Block Types
+* Sets bits to indicate which block faces are occluded.
+** 24: +X
+** 25: -X
+** 26: +Y
+** 27: -Y
+** 28: +Z
+** 29: -Z
+** 30: Reserved For Now
+** 31: Reserved For Now
+* For transparent block types, may be used as attribute flags.
+** For connecting block types, may indicate connection direction.
+
+Block Light:
+* (7:4): Color
+** Pick the color of more intense color depending on intensity.
+* (3:0): Intensity (0..15)
+
+Block Light Color:
+* 0: Mono White
+* 1..6: High Saturation Colors
+* 9..E: Low Saturation Colors
+* 7: Orange (Red/Yellow, Middle Saturation)
+* 8: Azure (Blue/Cyan, Middle Saturation)
+* F: Rose (Red/Magenta, Middle Saturation)
+
+Block Light Colors:
+* 1/9=Blue, 2/A=Green, 3/B=Cyan, 4/C=Red, 5/D=Magenta, 6/E=Yellow
+
+Within the lighting system, the color will be seen as a vector, rather than an absolute color point (hence the loss of black/white/gray distinction).
+
+Note that no color will be allowed for light with an intensity of 0.
+* Intensity 0 will correspond to monochromatic black.
+* Intensity 15 will correspond to full brightness.
+** The Mono-White case will pass the base color unmodified.
+** The Mono-White case will be assumed to represent 1.0 on a unit sphere.
+
+
+Sky Light:
+* Stored as a 4-bit intensity.
+* Gives light visible from sky in open-sky terrain.
+** This is multiplied by the current day-light for the time-of-day.
+** This use is N/A for worlds lacking a sun or similar (always assumed 0).
+
+Note that the Light fields will only apply to transparent block types:
+* Most solid blocks will store them as 0.
+* Complex block types may use them for additional attribute bits.
+
+
+Region Format:
+* Organized as 16-byte cells.
+* Starts with an 512-entry array (starting at 0x000010).
+** (19:0): Offset of each chunk (in cells).
+*** 0: Non-generated Chunk
+*** 1: Cave Air Chunk
+*** 2: Air Chunk (No Sky)
+*** 3: Air Chunk (Sky)
+*** 4..127: Solid chunk of a given block type.
+** (31:20): Storage Size of chunk (in Cells)
+
+Additional offsets may be provided for entity data and similar.
+No offsets/ranges may overlap, engine may assume corrupt region in this case.
+
+The offsets directly following the chunk list will be buffers:
+* 0: Region Occlusion Bitmap
+** Bit will be set for any block containing a non-air block type.
+* 1: Static Entity List
+* 2: Live Entity List
+
+The first 16 bytes of the region image will be used for a magic:
+* (0.. 7): "BTMRGN01"
+* (8..11): Logical size for region image (bytes)
+** Not required to match filesize.
+** Required to be larger than the size of the image data.
+
+Chunks:
+* BYTE maskFlag;
+* * Mask/Flag Byte
+** Modifier flags or optional fields.
+**   1: Set to use 64-bit blocks, else use 32-bit blocks.
+**   2: Indicates 8 or 4 bit block indices (H bit).
+**  64: Chunk Origin Present (Net Delta)
+** 128: Additional flag bits are present.
+* BYTE numBlocks;
+** Number of Unique Blocks
+** 0: Escape (No Index)
+** 1: Single Block (No Index)
+** 2..15: Use 4-bit index (if H bit is set)
+** 16..255: Use 8-bit index (and/or H bit is clear)
+* Followed by the array of blocks.
+** 4 or 8 Bytes (Single Block)
+** Up to 2K (Index)
+** 16K or 32K (No Index)
+* Followed by index data (if present).
+** Absent (No Index)
+** 2K (H set)
+** 4K (H clear)
+
+The chunk origin will not be encoded within regions, but may be present within delta messages. This will be given as a packed 32-bit quanity.
+* (11: 0): Chunk X
+* (23:12): Chunk Y
+* (26:24): Chunk Z
+* (31:27): Reserved (0)
+
+
+Chunks will be stored in an RP2 compressed form, with a 32-bit header:
+* (23: 0): Uncompressed size of data.
+* (27:24): Method (0=Store, 3=RP2)
+* (31:28): Magic Tag Value
+** 0-11: Reserved
+** 12: Chunk
+** 13: Delta (Net)
+** 14: Entity (Net) / Buffer (Region)
+** 15: Reserved
+
+An unexpected magic or similar will be interpreted as likely data corruption.
+
+May define a few block-type ranges for now:
+*  0..3: Air-like blocks (non-solid, invisible).
+** 0: Void
+** 1: Cave Air
+** 2: Open Air (Generic)
+** 3: Sky Air
+* 4..127: Various non-air block types.
+* 128+: TBD
+
+Cave Air:
+* Generated when caves are generated.
+* Decays to Open Air on contact with Open Air.
+* Mesh-generation may behave as if it were a solid block.
+* Used for locations which are fully isolated from the surface.
+
+The 0,0,0 block may not contain Void in generated terrain.
+* This block being Void indicates chunks which have not been generated.
+
+The Sky Air case will be a special case for air which has a direct unobstructed view of the sky. In most cases, it will readily decay into Open Air.
+
+
+Occlusion Bitmap:
+* Bits will be organized per-chunk, each 4096 bits / 512 bytes.
+* If it is 256K, it will represent a raw/unpacked bitmap.
+* If less than 64K, it will be in a packed form.
+
+In the unpacked form, each chunk will have its own section of the bitmap.
+* There is no index in this case.
+
+The packed form will have an index:
+* Will start with a 1K index, 16-bits per chunk.
+* These will encode an index into the rest of the bitmap (starts at 2).
+* Index values 0 and 1 in packed bitmaps will be special:
+** 0: Chunk contains only air blocks.
+** 1: Chunk contains only non-air blocks.
+** These overlap with what "would be" the space for the index structure.
+* Currently, the packed form will be limited to being under 64K.
+** Note that each mixed chunk will get its own spot in the bitmap.
+** Exceeding this limit will require using the unpacked form.
+
+
+
+=== Entity Data ===
+
+Entity Data:
+* Stored as ABXE.
+** Entity graph as binary serialized XML.
+** May subdivide between "static" entities and mobs.
+* May also stored in an RP2 compressed form.
+
+The entities will be split into static and live entities.
+
+Static Entities:
+* Will exist within a persistent blob of XML.
+** Static entities can not "despawn".
+** They may, however, be used to spawn live entities.
+** These will reflect functional entities, rather than interactive ones.
+
+Live Entities:
+* Live entities will be used for moving entities with an active state.
+** Mobs and similar will be live entities.
+** Live entities may spawn or despawn dynamically.
+** The XML blob will be regenerated from the entities within the region.
+
+The entities will be contained within an 'entities' tag in both cases.
+* Static entities may use an "entity" tag.
+* Mobs will use the "mobj" tag.
+** classname (string attrib): Gives the classname of the entity.
+** org_x (real attrib): Gives the X origin.
+** org_y (real attrib): Gives the Y origin.
+** org_z (real attrib): Gives the Z origin.
+** yaw (int attrib): Gives the yaw angle.
+** pitch (int attrib): Gives the pitch angle.
+** id (int attrib): Number that identifies the entity.
+*** This will be a sequence number assigned on entity creation.
+*** No two live entities will be allowed to have the same ID number.
+** Other attributes will depend on the classname.
+** Entities may contain sub-tags.
+*** These will depend on the entity in question.
+
+The origin will be given in absolute world coordinates.
+* These will be relative to a 1 meter base unit.
+* The X and Y coordinates will be constrained to the range of 0 to 65536.
+* The Z coordinate will be constrained to 0 to 128.
+
+
+=== Network Protocol (Possible) ===
+
+Will probably use ABXE.
+* Block / Chunk data embedded as binary blobs.
+* Messages may be RP2 compressed.
+
+Will likely use point-to-point TCP with Naggle disabled.
+* Single-player will use buffer-passing.
+* Will use a similar message format to the region format.
+
+Assume that engine will internally use a client/server model.
+* TBD: Client-side or server-side movement physics/etc.
+* Will probably use traditional "Sliding AABB" physics.
+
+Relative positions will always be encoded in "closest reachable distance" form (for entities near the world seam).
+* For a relative position near the seam, it will cross the seam.
+* A path across the world interior will not be used if it is a larger distance.
+

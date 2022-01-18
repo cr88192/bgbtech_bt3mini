@@ -1,0 +1,15 @@
+*.sou
+*.tga
+*.pdb
+*.pdn
+*.obj
+*.pdb
+*.db
+*.opendb
+*.sln
+*.ilk
+
+src/resource/region_*
+src/.vs/*
+*_shxlog.txt
+src/dump/*

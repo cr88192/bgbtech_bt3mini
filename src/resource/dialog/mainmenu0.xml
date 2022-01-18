@@ -1,0 +1,29 @@
+<dialog name="main" root="main">
+	<menu name="main" title="Main Menu">
+		<option text="New Game"/>
+		<option text="Options" gosubname="options"/>
+		<option text="Load"/>
+		<option text="Save"/>
+		<option text="Exit"/>
+	</menu>
+
+	<menu name="options" title="Options">
+		<option text="Back" gosubname="main"/>
+		<option text="Noclip" cvar="noclip"/>
+		<option text="Option 2"/>
+		<option text="Option 3"/>
+		<option text="Dialog Test 1" gosubname="dialog1"/>
+	</menu>
+
+	<convo name="dialog1">
+		<text>
+			Line 1
+			Line 2
+			Line 3
+		</text>
+		<option text="Back" gosubname="main"/>
+		<option text="Option 1"/>
+		<option text="Option 2"/>
+	</convo>
+
+</dialog>
