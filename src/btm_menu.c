@@ -129,11 +129,23 @@ int BTM_DrawStringPrim(int x, int y, int xs, int ys,
 
 int BTM_DrawString8px(int x, int y, char *str, u32 clr)
 {
+	if(!str)
+	{
+		BTM_DrawCharPrim(0, 0, 0, 0, 0, 0, 0);
+		return(0);
+	}
+
 	return(BTM_DrawStringPrim(x, y, 8, 8, str, btm_texfont_8px, clr));
 }
 
 int BTM_DrawString16px(int x, int y, char *str, u32 clr)
 {
+	if(!str)
+	{
+		BTM_DrawCharPrim(0, 0, 0, 0, 0, 0, 0);
+		return(0);
+	}
+
 	return(BTM_DrawStringPrim(x, y, 16, 16, str, btm_texfont_16px, clr));
 }
 

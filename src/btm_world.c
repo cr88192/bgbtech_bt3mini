@@ -273,7 +273,16 @@ u64 BTM_BlockCoordsToRcix(int cx, int cy, int cz)
 
 u64 BTM_WorldCorgToRcix(u64 cpos)
 {
-#ifndef BTM_RCIX_MORTON
+#ifdef BTM_RCIX_MORTON
+	int cx, cy, cz;
+
+	cx=(cpos>> 8)&65535;
+	cy=(cpos>>32)&65535;
+	cz=(cpos>>56)&255;
+	return(BTM_BlockCoordsToRcix(cx, cy, cz));
+
+#else
+
 	u64 cix, bix, hix, rix, rcix;
 	int rx, ry, hx, hy, hz, bx, by, bz;
 	int cx, cy, cz;
@@ -305,14 +314,6 @@ u64 BTM_WorldCorgToRcix(u64 cpos)
 
 
 //	return(BTM_BlockCoordsToRcix(cx, cy, cz));
-
-#else
-	int cx, cy, cz;
-
-	cx=(cpos>> 8)&65535;
-	cy=(cpos>>32)&65535;
-	cz=(cpos>>56)&255;
-	return(BTM_BlockCoordsToRcix(cx, cy, cz));
 #endif
 }
 
@@ -1187,6 +1188,201 @@ int BTMGL_EmitBlockFacesSlab(
 	return(0);
 }
 
+
+
+int BTMGL_EmitScaledBlockFaces(
+	float cxm, float cym, float czm,
+	float cxn, float cyn, float czn,
+	int fm, u32 blk,
+	u64 lbl, u64 lsl)
+{
+	float xyz[8*4];
+	float sta[4*4*2];
+	const int *tri;
+	float *st;
+	float mx, my, mz, nx, ny, nz;
+	int i0, i1, i2, i3;
+	u32 rgb, rgb1, binf;
+	int bt, tx, ty, bl, sl, ma;
+	int i, j, k, l;
+	
+	if(!(fm&0x3F))
+		return(0);
+	
+	bt=blk&255;
+	binf=btmgl_vox_atlas_side[bt];
+	
+	mx=cxm;	nx=cxn;
+	my=cym;	ny=cyn;
+	mz=czm;	nz=czn;
+	
+	for(i=0; i<8; i++)
+	{
+		j=i*4;
+		xyz[j+0]=(i&1)?nx:mx;
+		xyz[j+1]=(i&2)?ny:my;
+		xyz[j+2]=(i&4)?nz:mz;
+	}
+
+	tx=(binf>> 0)&15;	ty=15-((binf>>4)&15);
+	sta[0]=(tx+0)*(1.0/16)+(1.0/512);	sta[1]=1.0-(1.0/512)-(ty+0)*(1.0/16);
+	sta[2]=(tx+1)*(1.0/16)-(1.0/512);	sta[3]=1.0-(1.0/512)-(ty+0)*(1.0/16);
+	sta[4]=(tx+0)*(1.0/16)+(1.0/512);	sta[5]=1.0+(1.0/512)-(ty+1)*(1.0/16);
+	sta[6]=(tx+1)*(1.0/16)-(1.0/512);	sta[7]=1.0+(1.0/512)-(ty+1)*(1.0/16);
+
+	if(((binf>>8)&0xFF) == (binf&0xFF))
+	{
+		memcpy(sta+ 8, sta+0, 8*sizeof(float));
+		memcpy(sta+16, sta+0, 8*sizeof(float));
+	}else
+	{
+		tx=(binf>> 8)&15;	ty=15-((binf>>12)&15);
+		sta[ 8]=(tx+0)*(1.0/16)+(1.0/256);	sta[ 9]=(ty+0)*(1.0/16)+(1.0/256);
+		sta[10]=(tx+1)*(1.0/16)-(1.0/256);	sta[11]=(ty+0)*(1.0/16)+(1.0/256);
+		sta[12]=(tx+0)*(1.0/16)+(1.0/256);	sta[13]=(ty+1)*(1.0/16)-(1.0/256);
+		sta[14]=(tx+1)*(1.0/16)-(1.0/256);	sta[15]=(ty+1)*(1.0/16)-(1.0/256);
+
+		tx=(binf>>16)&15;	ty=15-((binf>>20)&15);
+		sta[16]=(tx+0)*(1.0/16)+(1.0/256);	sta[17]=(ty+0)*(1.0/16)+(1.0/256);
+		sta[18]=(tx+1)*(1.0/16)-(1.0/256);	sta[19]=(ty+0)*(1.0/16)+(1.0/256);
+		sta[20]=(tx+0)*(1.0/16)+(1.0/256);	sta[21]=(ty+1)*(1.0/16)-(1.0/256);
+		sta[22]=(tx+1)*(1.0/16)-(1.0/256);	sta[23]=(ty+1)*(1.0/16)-(1.0/256);
+
+		for(i=4; i<12; i++)
+		{
+			sta[i*2+1]=1.0-sta[i*2+1];
+		}
+	}
+
+#if 0
+	if(binf&BTM_BLKDFL_FLUID)
+	{
+		st=sta;
+		
+		for(i=0; i<3; i++)
+		{
+			i0=((btmgl_time_ms>>5)+(cxm<<4)-(cym<<4))&255;
+			i1=(i0+16)&255;
+			i2=(i0-16)&255;
+			i3=(i2+16)&255;
+			st[0]+=btmra_sinang_f[i0]*(0.125/16);
+			st[1]+=btmra_cosang_f[i0]*(0.125/16);
+			st[2]+=btmra_sinang_f[i1]*(0.125/16);
+			st[3]+=btmra_cosang_f[i1]*(0.125/16);
+			st[4]+=btmra_sinang_f[i2]*(0.125/16);
+			st[5]+=btmra_cosang_f[i2]*(0.125/16);
+			st[6]+=btmra_sinang_f[i3]*(0.125/16);
+			st[7]+=btmra_cosang_f[i3]*(0.125/16);
+			st+=8;
+		}
+	}
+#endif
+
+#if 1
+	for(i=0; i<6; i++)
+	{
+		if(!(fm&(1<<i)))
+			continue;
+
+		bl=(lbl>>(i*8))&255;
+		sl=(lsl>>(i*8))&255;
+		
+		l=((bl&15)>(sl&15))?bl:sl;
+
+		if(i==4)
+		{
+			rgb=0xFFFFFFFFU;
+			st=sta+8;
+		}else if(i==5)
+		{
+			rgb=0xFF9F9F9FU;
+			st=sta+16;
+		}else
+		{
+			rgb=0xFFBFBFBFU;
+			st=sta;
+		}
+		
+		if(fm&64)
+		{
+			rgb&=0xFF7FFF7FU;
+		}
+
+		if(l!=0x0F)
+		{
+			rgb=BTM_ModulateColorRgbForBlockLight(rgb, l);
+		}
+
+		tri=btmgl_cube_quads+i*4;
+		BTMGL_EmitBlockVertex(xyz+tri[0]*4, st+0*2, rgb);
+		BTMGL_EmitBlockVertex(xyz+tri[1]*4, st+1*2, rgb);
+		BTMGL_EmitBlockVertex(xyz+tri[2]*4, st+3*2, rgb);
+		BTMGL_EmitBlockVertex(xyz+tri[3]*4, st+2*2, rgb);
+	}
+#endif
+
+	return(0);
+}
+
+int BTMGL_EmitBlockFacesStair(
+	int cx, int cy, int cz,
+	int fm, u32 blk,
+	u64 lbl, u64 lsl)
+{
+	BTMGL_EmitScaledBlockFaces(
+		cx+0, cy+0, cz+0,
+		cx+1, cy+1, cz+0.33,
+		fm, blk, lbl, lsl);
+
+	switch((blk>>8)&3)
+	{
+	case 0:
+		BTMGL_EmitScaledBlockFaces(
+			cx+0.00, cy+0.00, cz+0.00,
+			cx+1.00, cy+0.33, cz+1.00,
+			fm, blk, lbl, lsl);
+		BTMGL_EmitScaledBlockFaces(
+			cx+0.00, cy+0.33, cz+0.00,
+			cx+1.00, cy+0.66, cz+0.66,
+			fm, blk, lbl, lsl);
+		break;
+	case 2:
+		BTMGL_EmitScaledBlockFaces(
+			cx+0.00, cy+0.66, cz+0.00,
+			cx+1.00, cy+1.00, cz+1.00,
+			fm, blk, lbl, lsl);
+		BTMGL_EmitScaledBlockFaces(
+			cx+0.00, cy+0.33, cz+0.00,
+			cx+1.00, cy+0.66, cz+0.66,
+			fm, blk, lbl, lsl);
+		break;
+
+	case 3:
+		BTMGL_EmitScaledBlockFaces(
+			cx+0.00, cy+0.00, cz+0.00,
+			cx+0.33, cy+1.00, cz+1.00,
+			fm, blk, lbl, lsl);
+		BTMGL_EmitScaledBlockFaces(
+			cx+0.33, cy+0.00, cz+0.00,
+			cx+0.66, cy+1.00, cz+0.66,
+			fm, blk, lbl, lsl);
+		break;
+	case 1:
+		BTMGL_EmitScaledBlockFaces(
+			cx+0.66, cy+0.00, cz+0.00,
+			cx+1.00, cy+1.00, cz+1.00,
+			fm, blk, lbl, lsl);
+		BTMGL_EmitScaledBlockFaces(
+			cx+0.33, cy+0.00, cz+0.00,
+			cx+0.66, cy+1.00, cz+0.66,
+			fm, blk, lbl, lsl);
+		break;
+	}
+
+//	BTMGL_EmitBlockFaces(cx, cy, cz, 0x80|fm, blk, lbl, lsl);
+	return(0);
+}
+
 int BTMGL_DrawSceneBlocks(BTM_World *wrl)
 {
 	BTM_Region *rgn;
@@ -1365,6 +1561,9 @@ int BTMGL_DrawSceneBlocks(BTM_World *wrl)
 		}else if((blkd&BTM_BLKDFL_TY_MASK)==BTM_BLKDFL_TY_SLAB)
 		{
 			BTMGL_EmitBlockFacesSlab(cx, cy, cz, fm, blk, lbl, lsl);
+		}else if((blkd&BTM_BLKDFL_TY_MASK)==BTM_BLKDFL_TY_STAIR)
+		{
+			BTMGL_EmitBlockFacesStair(cx, cy, cz, fm, blk, lbl, lsl);
 		}
 	}
 

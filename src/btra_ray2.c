@@ -249,7 +249,10 @@ int BTM_RaycastLineSingle(BTM_World *wrl, int max,
 	BTM_GenerateBaseRegion(wrl, rgn);
 	rgix=rix;
 	
-	rgn->dirty|=2;	/* Player has been here. */
+	if(!(flag&4))
+	{
+		rgn->dirty|=2;	/* Player has been here. */
+	}
 	
 	voxbm=rgn->voxbm;
 	voxbmix=rgn->voxbmix;
@@ -350,8 +353,8 @@ int BTM_RaycastLineSingle(BTM_World *wrl, int max,
 			rix=BTM_Rcix2Rix(rcix);
 			cix=BTM_Rcix2Cix(rcix);
 			i=voxbmix[cix>>12];
-			voxbmcs=voxbm+(i<<6);
 			j=(cix>>6)&63;
+			voxbmcs=voxbm+(i<<6);
 			k=(cix&63);
 			blk=voxbmcs[j];
 
@@ -437,7 +440,7 @@ int BTM_RaycastLineSingle(BTM_World *wrl, int max,
 //	if((blk_d&(BTM_BLKDFL_SEETHRU|BTM_BLKDFL_FLUID)) && (n>64))
 	{
 		i=BTM_RaycastTryAddHitCix(wrl, rcix);
-		i+=BTM_RaycastLineSingle(wrl, n-1, cpos+step, step, flag);
+		i+=BTM_RaycastLineSingle(wrl, n-1, cpos+step, step, flag|4);
 		return(i);
 	}
 
@@ -759,9 +762,11 @@ int BTM_RaycastSceneQuad(BTM_World *wrl)
 
 #if 0
 		y0_ang=yaw*4+((x-24)*6);
+//		y0_ang=yaw*4+((x-24)*5);
 		y0_ang=y0_ang+yji;
 
-		p0_ang=pitch*4+((y-18)*6);
+//		p0_ang=pitch*4+((y-18)*6);
+		p0_ang=pitch*4+((y-18)*4);
 		p0_ang=p0_ang+yji;
 #endif
 
@@ -821,6 +826,12 @@ int BTM_RaycastSceneQuad(BTM_World *wrl)
 			if(x&7)
 				continue;
 		}
+
+		if(y<8)
+		{
+			if(x&3)
+				continue;
+		}
 	
 		y0_ang=x*32;
 //		p0_ang=-256+(y*12);
@@ -839,23 +850,6 @@ int BTM_RaycastSceneQuad(BTM_World *wrl)
 
 	/* Raycast directly forwards. */
 	step0=BTM_RaycastStepVectorB(yaw*4, pitch*4);
-
-#if 0
-	x=(step0>> 0)&0x00FFFFFF;
-	y=(step0>>24)&0x00FFFFFF;
-	z=(step0>>48)&0x0000FFFF;
-	
-	x=((s32)(x<<8))>>8;
-	y=((s32)(y<<8))>>8;
-	z=((s32)(z<<16))>>16;
-//	x>>=2;	y>>=2;	z>>=2;
-	x>>=3;	y>>=3;	z>>=3;
-	
-	step0=
-		((x&0x00FFFFFFULL)    ) |
-		((y&0x00FFFFFFULL)<<24) |
-		((z&0x0000FFFFULL)<<48) ;
-#endif
 
 	BTM_RaycastLineSingle(wrl, 24,
 //	BTM_RaycastLineSingle(wrl, 96,

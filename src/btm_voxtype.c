@@ -24,24 +24,24 @@ static const u32 btmgl_vox_atlas_side[256]={
 0x00000303,		/* 06: grass */
 0x00000404,		/* 07: stone */
 
-0x00001212, 0x00001313, 0x0000FFFF, 0x00000F0F,		/* 08-0B */
+0x00001212, 0x00001313, 0x0000FFFF, 0x02000F0F,		/* 08-0B */
 0x08007171, 0x08007373, 0x08009191, 0x00002323,		/* 0C-0F */
 0x00002424, 0x00002525, 0x00002626, 0x00002727,		/* 10-13 */
-0x00002828, 0x00002929, 0x00001F1F, 0x00000E0E,		/* 14-17 */
-0x00000505, 0x00001414, 0x00001515, 0x00001616,		/* 18-1B */
-0x00000707, 0x00000606, 0x00001717, 0x00003C3C,		/* 1C-1F */
+0x00002828, 0x00002929, 0x02001F1F, 0x02000E0E,		/* 14-17 */
+0x00000505, 0x00001414, 0x00001515, 0x00003C3C,		/* 18-1B */
+0x00001616, 0x00000707, 0x00000606, 0x00001717,		/* 1C-1F */
 0x00002020, 0x00002121, 0x0100E0E0, 0x0100E1E1,		/* 20-23 */
-0x0100F1F1, 0x00001E1E, 0x00002E2E, 0x00002F2F,		/* 24-27 */
+0x0100F1F1, 0x02001E1E, 0x02002E2E, 0x02002F2F,		/* 24-27 */
 0x00001818, 0x00000808, 0x00000909, 0x00001919,		/* 28-2B */
-0x00000A0A, 0x00001A1A, 0x00002A2A, 0x00000B0B,		/* 2C-2F */
+0x00000A0A, 0x00001A1A, 0x14002A2A, 0x00000B0B,		/* 2C-2F */
 0x00001B1B, 0x00003E3E, 0x00003333, 0x00003434,		/* 30-33 */
 0x00003535, 0x00003636, 0x00003737, 0x00003838,		/* 34-37 */
-0x00003939, 0x00000B0B, 0x00002B2B, 0x10003A3A,		/* 38-3B */
-0x10003B3B, 0x0400EDED, 0x00001C1C, 0x00002C2C,		/* 3C-3F */
+0x00003939, 0x20000B0B, 0x00002B2B, 0x10003A3A,		/* 38-3B */
+0x10003B3B, 0x0600EDED, 0x00001C1C, 0x00002C2C,		/* 3C-3F */
 0x00003232, 0x00004242, 0x00003030, 0x00003434,		/* 40-43 */
 0x00004444, 0x00004545, 0x00001414, 0x00001313,		/* 44-47 */
 0x00005353, 0x00005454, 0x00005151, 0x00005252,		/* 48-4B */
-0x00005555, 0x00005656, 0x00004F4F, 0x14003C3C,		/* 4C-4F */
+0x00005555, 0x00005656, 0x06004F4F, 0x14003C3C,		/* 4C-4F */
 0x00001010,		/* 50: bigbrick_brn */
 0x00001111,		/* 51: bigbrick_gry */
 };
@@ -87,3 +87,55 @@ int BTM_BlockIsTransparentP(BTM_World *wrl, u32 blk)
 	return(0);
 }
 
+
+int BTM_BlockIsOrientedP(BTM_World *wrl, u32 blk)
+{
+	u32 blkd;
+	int j;
+
+	j=blk&255;
+	if((j>0)&&(j<4))
+		return(1);
+	
+	blkd=btmgl_vox_atlas_side[j];
+
+	if((blkd&BTM_BLKDFL_TY_MASK)==BTM_BLKDFL_TY_STAIR)
+		return(1);
+
+	return(0);
+}
+
+char *btm_blkmininames[256]={
+"Void",		"AirCave",	"Air",		"AirSky",		//00..03
+"HrdStn",	"Dirt",		"Grass",	"Stone",		//04..07
+"BrkRed",	"DirtRed",	"NoFace",	"Glass",		//08..0B
+"Lava",		"Water",	"Slime",	"LantRed",		//0C..0F
+"LantBlu",	"LantYel",	"LantGrn",	"LantCyn",		//10..13
+"LantVio",	"LantWht",	"Grate",	"Bars",			//14..17
+"Stone2",	"Stone3",	"BgBrkStn",	"Hay",			//18..1B
+"TriDirt0",	"TriDirt1",	"TriDirt2",	"TriDirt3",		//1C..1F
+"FarmWet",	"FarmDry",	"Sky1",		"Sky2",			//20..23
+"Sky3",		"Fence1",	"Fence2",	"Fence3",		//24..27
+"Bricks",	"Log",		"Leaves",	"FrLeaves",		//28..2B
+"SandStn",	"Sand",		"Snow",		"Cobble",		//2C..2F
+"CobleGrn",	"Plant",	"SomaRed",	"SomaBlu",		//30..33
+"SomaYel",	"SomaGrn",	"SomaCyn",	"SomaVio",		//34..37
+"SomaWht",	"Stairs",	"GngRock",	"StnSlab",		//38..3B
+"WoodSlab",	"Trigger",	"Planks",	"Planks2",		//3C..3F
+"SomaBlk",	"BrkBlk",	"Cloud",	"BrkBlu",		//40..43
+"Stn2Blu",	"BrickGrn",	"CoblBlu",	"CoblRed",		//44..47
+"Stn3Blu",	"BgBrkBlu",	"HexTile",	"Brk2Red",		//48..4B
+"GrsFgBlu",	"GrsFgRed",	"Ladder",	"HayNest",		//4C..4F
+"BgBrkBrn",	"BgBrkGry",
+NULL
+};
+
+char *BTM_BlockMiniDesc(BTM_World *wrl, u32 blk)
+{
+	char *s;
+	
+	s=btm_blkmininames[blk&255];
+	if(!s)
+		s="?";
+	return(s);
+}

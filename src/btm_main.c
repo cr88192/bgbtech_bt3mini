@@ -660,6 +660,7 @@ int BTM_ConCmd_Time(BTM_ConCmd *cmd, char **args)
 
 int main(int argc, char *argv[])
 {
+	char tb[256];
 	TKRA_Context *ractx;
 	BTM_World *wrl;
 //	BTM_Screen *scr;
@@ -674,6 +675,7 @@ int main(int argc, char *argv[])
 	u16 *fbuf;
 	byte *tbuf;
 	u64 wpos;
+	u32 tblk;
 	int x, y, z, xs, ys, txs, tys;
 	int afrac, astep, mdl_ntris;
 	int i, j, k, l;
@@ -919,7 +921,24 @@ int main(int argc, char *argv[])
 			{
 				if(wrl->scr_lahit)
 				{
-					BTM_SetWorldBlockCix(wrl, wrl->scr_lahit, wrl->sel_bt);
+					tblk=wrl->sel_bt;
+					
+					if(BTM_BlockIsOrientedP(wrl, tblk))
+					{
+						switch(((int)(cam_ang_yaw/45))&7)
+						{
+							case 7:		case 0:
+								tblk|=0<<8; break;
+							case 1:		case 2:
+								tblk|=1<<8; break;
+							case 3:		case 4:
+								tblk|=2<<8; break;
+							case 5:		case 6:
+								tblk|=3<<8; break;
+						}
+					}
+				
+					BTM_SetWorldBlockCix(wrl, wrl->scr_lahit, tblk);
 					BTM_UpdateWorldBlockOccCix2(wrl, wrl->scr_lahit);
 				}
 			}
@@ -1296,15 +1315,19 @@ int main(int argc, char *argv[])
 		tkra_glBindTexture(GL_TEXTURE_2D, 2);
 		tkra_glBegin(GL_QUADS);
 		tkra_glTexCoord2f(f0, f2);
-		tkra_glVertex2f(96, -66);
+		tkra_glVertex2f(64, -66);
 		tkra_glTexCoord2f(f0, f3);
-		tkra_glVertex2f(96, -98);
+		tkra_glVertex2f(64, -98);
 		tkra_glTexCoord2f(f1, f3);
-		tkra_glVertex2f(128, -98);
+		tkra_glVertex2f(96, -98);
 		tkra_glTexCoord2f(f1, f2);
-		tkra_glVertex2f(128, -66);
+		tkra_glVertex2f(96, -66);
 
 		tkra_glEnd();
+		
+		sprintf(tb, "%02X\n%s", wrl->sel_bt,
+			BTM_BlockMiniDesc(wrl, wrl->sel_bt));
+		BTM_DrawString8px(96, -74, tb, 0xFFFFFFFFU);
 
 		BTM_DrawMenu();
 		BTM_DrawConsole();
