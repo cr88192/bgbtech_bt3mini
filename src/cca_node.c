@@ -833,6 +833,7 @@ char *BCCX_GetCst(BCCX_Node *n,
 }
 
 #if 1
+
 s64 BCCX_GetIntCst(BCCX_Node *n, bccx_cxstate *rcst, char *var)
 {
 	u16 *an;
@@ -879,6 +880,13 @@ double BCCX_GetFloatCst(BCCX_Node *n, bccx_cxstate *rcst, char *var)
 		return(-1);
 	}
 	return(0);
+}
+
+s64 BCCX_GetInt(BCCX_Node *n, char *var)
+{
+	bccx_cxstate iv;
+	iv=0;
+	return(BCCX_GetIntCst(n, &iv, var));
 }
 #endif
 

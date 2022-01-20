@@ -1,3 +1,19 @@
+/*
+Copyright (C) 2022  Brendan G Bohannon
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*/
+
 typedef struct BTM_Menu_s BTM_Menu;
 
 struct BTM_Menu_s {
@@ -253,6 +269,45 @@ int BTM_ShowMenu(char *name, char *subname)
 			btm_showmenu=NULL;
 			return(-1);
 		}
+	}
+	
+	return(0);
+}
+
+BCCX_Node *BTM_LookupMenuNode(char *name, char *subname)
+{
+	BTM_Menu *mcur;
+	BCCX_Node *ncur;
+	
+	BTM_MenuInit();
+
+	if(!name)
+	{
+		return(NULL);
+	}
+	
+	mcur=btm_menuroot;
+	while(mcur)
+	{
+		if(mcur->name && !strcmp(mcur->name, name))
+			break;
+		mcur=mcur->next;
+	}
+	
+	if(!mcur)
+	{
+		return(NULL);
+	}
+
+	if(subname)
+	{
+		ncur=BCCX_FindAttr(mcur->root, "name", subname);
+		return(ncur);
+	}else
+	{
+		subname=BCCX_Get(mcur->root, "root");
+		ncur=BCCX_FindAttr(mcur->root, "name", subname);
+		return(ncur);
 	}
 	
 	return(0);

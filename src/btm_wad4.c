@@ -1,3 +1,20 @@
+/*
+Copyright (C) 2022  Brendan G Bohannon
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*/
+
+
 #define BGBCC_FOURCC(a, b, c, d)	((a)|((b)<<8)|((c)<<16)|((d)<<24))
 
 #define	FCC_WAD4	BGBCC_FOURCC('W', 'A', 'D', '4')
@@ -511,169 +528,3 @@ byte *FS_LoadFile(char *name, int *rsz, int pad)
 	
 	return(NULL);
 }
-
-#if 0
-
-pack_t *FS_LoadWad4File( char *wadfile, const char *basename )
-{
-	char			tb[512];
-	wad4head_t		head;
-	FILE			*wadfd;
-	wad4context_t	*wctx;
-	wad4lump_t		*de;
-	fileInPack_t	*buildBuffer, *buildEnd, *bde;
-	pack_t			*pack;
-	char			*namePtr, *nameBuf, *nameBufEnd;
-	int				i, j, k, l, nl, len, nl2, hash;
-	
-	wadfd=fopen(wadfile, "rb");
-	if(!wadfd)
-		return(NULL);
-	
-	fread(&head, 1, sizeof(head), wadfd);
-	
-	if(head.ident!=FCC_WAD4)
-	{
-		fclose(wadfd);
-		return(NULL);
-	}
-	
-//	wctx = FS_W_Malloc( sizeof(wad4context_t) + sizeof(wad4head_t));
-//	wctx->head = (wad4head_t *)(wctx+1);
-	wctx = FS_W_Malloc( sizeof(wad4context_t) );
-//	wctx->head = FS_W_Malloc( sizeof(wad4head_t) );
-	wctx->head = &(wctx->t_head);
-	memcpy(wctx->head, &head, sizeof(head));
-	
-	wctx->name = strdup(wadfile);
-	
-	wctx->fd = wadfd;
-	wctx->szdir = wctx->head->numlumps;
-
-	wctx->dir = FS_W_Malloc( wctx->szdir * sizeof( wad4lump_t ) );
-	fseek(wadfd, wctx->head->diroffs * 64, SEEK_SET);
-	fread(wctx->dir, 1, wctx->szdir * sizeof( wad4lump_t ), wadfd);
-
-//	fseek(wadfd, 0, SEEK_SET);
-	
-	wctx->seq = fs_wadseq++;
-	
-	l = 256;
-	pack = Z_Malloc( sizeof( pack_t ) + (l * sizeof(fileInPack_t *)) );
-	pack->hashTable = (fileInPack_t **) (((char *) pack) + sizeof( pack_t ));
-
-//	pack = FS_W_Malloc( sizeof( pack_t ) );
-//	pack = Z_Malloc( sizeof( pack_t ) );
-	pack->hashSize = l;
-//	pack->hashTable = FS_W_Malloc(l * sizeof(fileInPack_t *));
-	memset(pack->hashTable, 0, l * sizeof(fileInPack_t *));
-
-//	for(i = 0; i < pack->hashSize; i++)
-//		{ pack->hashTable[i] = NULL; }
-
-	Q_strncpyz( pack->pakFilename, wadfile, sizeof( pack->pakFilename ) );
-	Q_strncpyz( pack->pakBasename, basename, sizeof( pack->pakBasename ) );
-
-	l = strlen( pack->pakBasename );
-	if ( l > 4 && !Q_stricmp( pack->pakBasename + l - 4, ".wad" ) )
-	{
-		pack->pakBasename[l - 4] = 0;
-	}
-
-	nl = wctx->head->numlumps;
-	len = 0;
-	nl2 = 0;
-
-	for(i=2; i<nl; i++)
-	{
-		de=(wctx->dir)+i;
-		if(de->name[0]=='$')
-			continue;
-		if(de->ety!=1)
-			continue;
-		FS_Wad4PathForLump(wctx, i, tb);
-		if(strlen(tb)>256)
-			__debugbreak();
-		
-		len += strlen(tb) + 1;
-		nl2++;
-	}
-
-	buildBuffer = FS_W_Malloc( (nl2 * sizeof( fileInPack_t )) + len );
-	nameBuf = ((char *) buildBuffer) + (nl2 * sizeof( fileInPack_t ));
-
-//	buildBuffer = FS_W_Malloc( (nl2 + 4) * sizeof( fileInPack_t ));
-	buildEnd = buildBuffer + nl2;
-//	nameBuf = FS_W_Malloc (len + 256);
-
-	namePtr = nameBuf;
-	nameBufEnd = nameBuf + len;
-	
-	pack->wad4 = wctx;
-	pack->buildBuffer = buildBuffer;
-	pack->numfiles = nl2;
-
-
-	j=0; bde=buildBuffer;
-	for(i=2; i<nl; i++)
-	{
-		de=(wctx->dir)+i;
-		if(de->name[0]=='$')
-			continue;
-		if(de->ety!=1)
-			continue;
-
-		FS_Wad4PathForLump(wctx, i, tb);
-
-		Q_strlwr( tb );
-		hash = FS_HashFileName(tb, pack->hashSize);
-//		buildBuffer[j].name = namePtr;
-//		buildBuffer[j].wadlump = i;
-//		strcpy( buildBuffer[j].name, tb );
-
-		bde->wadlump = i;
-		bde->name = namePtr;
-		strcpy( bde->name, tb );		
-		namePtr += strlen(namePtr) + 1;
-
-//		buildBuffer[j].next = pack->hashTable[hash];
-//		pack->hashTable[hash] = &buildBuffer[j];
-
-		bde->next = pack->hashTable[hash];
-		pack->hashTable[hash] = bde;
-		bde++;
-
-//		j++;
-	}
-
-	if(bde > buildEnd)
-		{ __debugbreak(); }
-	
-	if(namePtr > nameBufEnd)
-		{ __debugbreak(); }
-
-//	fclose(wadfd);
-//	wctx->fd=NULL;
-
-#if 0
-	fclose(wadfd);
-
-	wadfd=fopen(wadfile, "rb");
-	wctx->fd=wadfd;
-#endif
-
-	Q_MallocCheckSane();
-
-	return(pack);
-}
-
-int FS_DestroyWad4File( pack_t *pack )
-{
-	FS_W_Free(pack->wad4->dir);
-	FS_W_Free(pack->wad4);
-
-	FS_W_Free(pack->buildBuffer);
-	Z_Free(pack);
-}
-
-#endif

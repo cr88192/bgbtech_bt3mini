@@ -1,0 +1,94 @@
+<structure root="house">
+	<object name="house">
+
+		<fill min_x=-5 min_y=-5 min_z=0 max_x=5 max_y=5 max_z=9 block="air"/>
+		<fill min_x=-5 min_y=-5 min_z=0 max_x=5 max_y=5 max_z=0 block="cobble"/>
+
+		<fill min_x=-5 min_y=-5 min_z=1 max_x=-5 max_y= 5 max_z=4
+			block="planks"/>
+		<fill min_x= 5 min_y=-5 min_z=1 max_x= 5 max_y= 5 max_z=4
+			block="planks"/>
+		<fill min_x=-5 min_y=-5 min_z=1 max_x= 5 max_y=-5 max_z=4
+			block="planks"/>
+		<fill min_x=-5 min_y= 5 min_z=1 max_x= 5 max_y= 5 max_z=4
+			block="planks"/>
+		<fill min_x=-5 min_y=-5 min_z=4 max_x= 5 max_y= 5 max_z=4
+			block="planks"/>
+
+		<fill min_x=-5 min_y=-5 min_z=1 max_x=-5 max_y=-5 max_z=4
+			block="cobble"/>
+		<fill min_x= 5 min_y=-5 min_z=1 max_x= 5 max_y=-5 max_z=4
+			block="cobble"/>
+		<fill min_x=-5 min_y= 5 min_z=1 max_x=-5 max_y= 5 max_z=4
+			block="cobble"/>
+		<fill min_x= 5 min_y= 5 min_z=1 max_x= 5 max_y= 5 max_z=4
+			block="cobble"/>
+
+		<fill min_x=-5 min_y=-5 min_z=4 max_x=-5 max_y= 5 max_z=4
+			block="cobble"/>
+		<fill min_x= 5 min_y=-5 min_z=4 max_x= 5 max_y= 5 max_z=4
+			block="cobble"/>
+		<fill min_x=-5 min_y=-5 min_z=4 max_x= 5 max_y=-5 max_z=4
+			block="cobble"/>
+		<fill min_x=-5 min_y= 5 min_z=4 max_x= 5 max_y= 5 max_z=4
+			block="cobble"/>
+		<fill min_x=-5 min_y=-5 min_z=4 max_x= 5 max_y= 5 max_z=4
+			block="cobble"/>
+
+		<random>
+			<instance rel_x=0 rel_y=0 rel_z=0 subname="face_px"/>
+			<instance rel_x=0 rel_y=0 rel_z=0 subname="face_nx"/>
+			<instance rel_x=0 rel_y=0 rel_z=0 subname="face_py"/>
+			<instance rel_x=0 rel_y=0 rel_z=0 subname="face_ny"/>
+		</random>
+
+	</object>
+
+	<object name="roof_x">
+		<fill min_x=-5 min_y=-4 min_z=5 max_x= 5 max_y= 4 max_z=5
+			block="planks"/>
+		<fill min_x=-5 min_y=-3 min_z=6 max_x= 5 max_y= 3 max_z=6
+			block="planks"/>
+		<fill min_x=-5 min_y=-2 min_z=7 max_x= 5 max_y= 2 max_z=7
+			block="planks"/>
+		<fill min_x=-5 min_y=-1 min_z=8 max_x= 5 max_y= 1 max_z=8
+			block="planks"/>
+	</object>
+
+	<object name="roof_y">
+		<fill min_y=-5 min_x=-4 min_z=5 max_y= 5 max_x= 4 max_z=5
+			block="planks"/>
+		<fill min_y=-5 min_x=-3 min_z=6 max_y= 5 max_x= 3 max_z=6
+			block="planks"/>
+		<fill min_y=-5 min_x=-2 min_z=7 max_y= 5 max_x= 2 max_z=7
+			block="planks"/>
+		<fill min_y=-5 min_x=-1 min_z=8 max_y= 5 max_x= 1 max_z=8
+			block="planks"/>
+	</object>
+
+	<object name="face_px">
+		<fill min_x= 5 min_y=-1 min_z=1 max_x= 5 max_y= 1 max_z=2
+			block="air"/>
+		<instance rel_x=0 rel_y=0 rel_z=0 subname="roof_y"/>
+	</object>
+
+	<object name="face_nx">
+		<fill min_x=-5 min_y=-1 min_z=1 max_x=-5 max_y= 1 max_z=2
+			block="air"/>
+		<instance rel_x=0 rel_y=0 rel_z=0 subname="roof_y"/>
+	</object>
+
+
+	<object name="face_py">
+		<fill min_y= 5 min_x=-1 min_z=1 max_y= 5 max_x= 1 max_z=2
+			block="air"/>
+		<instance rel_x=0 rel_y=0 rel_z=0 subname="roof_x"/>
+	</object>
+
+	<object name="face_ny">
+		<fill min_y=-5 min_x=-1 min_z=1 max_y=-5 max_x= 1 max_z=2
+			block="air"/>
+		<instance rel_x=0 rel_y=0 rel_z=0 subname="roof_x"/>
+	</object>
+
+</structure>

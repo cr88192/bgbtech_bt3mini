@@ -1,5 +1,23 @@
+/*
+Copyright (C) 2022  Brendan G Bohannon
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*/
+
 // byte *wrl_zmap;
 // byte *wrl_nmap;
+
+BCCX_Node *BTM_LookupMenuNode(char *name, char *subname);
 
 int btm_tgrand(BTM_World *wrl)
 {
@@ -423,5 +441,127 @@ int BTM_GenerateBaseRegion(BTM_World *wrl, BTM_Region *rgn)
 		BTM_UpdateBlockLightForRCix(wrl, rcix);
 	}
 
+	return(0);
+}
+
+int BTM_InstFill(BTM_World *wrl,
+	int mcx, int mcy, int mcz,
+	int ncx, int ncy, int ncz,
+	u32 blk)
+{
+	int x, y, z;
+
+	for(z=mcz; z<=ncz; z++)
+		for(y=mcy; y<=ncy; y++)
+			for(x=mcx; x<=ncx; x++)
+	{
+		BTM_SetWorldBlockNlXYZ(wrl, +x, y, z, blk);
+	}
+
+	return(0);
+}
+
+char *btm_curtopname;
+
+int BTM_InstanceStructureNodeAt(BTM_World *wrl,
+	int bcx, int bcy, int bcz, BCCX_Node *node)
+{
+	BCCX_Node *c;
+	char *bty, *s0, *s1, *s2;
+	char *otop;
+	u32 blk;
+	int na, ci;
+	int mx, my, mz, nx, ny, nz;
+
+	if(!node)
+		return(0);
+
+	if(BCCX_TagIsP(node, "structure") ||
+		BCCX_TagIsP(node, "list") ||
+		BCCX_TagIsP(node, "object"))
+	{
+		na=BCCX_GetNodeChildCount(node);
+		for(ci=0; ci<na; ci++)
+		{
+			c=BCCX_GetNodeIndex(node, ci);
+			BTM_InstanceStructureNodeAt(wrl, bcx, bcy, bcz, c);
+		}
+		return(0);
+	}
+
+	if(BCCX_TagIsP(node, "random"))
+	{
+		na=BCCX_GetNodeChildCount(node);
+		if(na<=0)
+			return(0);
+
+		ci=rand()%na;
+		c=BCCX_GetNodeIndex(node, ci);
+		BTM_InstanceStructureNodeAt(wrl, bcx, bcy, bcz, c);
+		return(0);
+	}
+
+	if(BCCX_TagIsP(node, "fill"))
+	{
+		mx=BCCX_GetInt(node, "min_x");
+		my=BCCX_GetInt(node, "min_y");
+		mz=BCCX_GetInt(node, "min_z");
+		nx=BCCX_GetInt(node, "max_x");
+		ny=BCCX_GetInt(node, "max_y");
+		nz=BCCX_GetInt(node, "max_z");
+
+		bty=BCCX_Get(node, "block");
+		blk=BTM_BlockForName(wrl, bty);
+		if(!blk)
+			return(0);
+		
+		BTM_InstFill(wrl,
+			bcx+mx, bcy+my, bcz+mz,
+			bcx+nx, bcy+ny, bcz+nz,
+			blk);
+		return(0);
+	}
+
+	if(BCCX_TagIsP(node, "instance"))
+	{
+		mx=BCCX_GetInt(node, "rel_x");
+		my=BCCX_GetInt(node, "rel_y");
+		mz=BCCX_GetInt(node, "rel_z");
+
+		s1=BCCX_Get(node, "name");
+		if(!s1)
+			s1=btm_curtopname;
+		
+		if(!s1)
+			return(0);
+		
+		s2=BCCX_Get(node, "subname");
+		
+		otop=btm_curtopname;
+		btm_curtopname=s1;
+		
+		c=BTM_LookupMenuNode(s1, s2);
+		BTM_InstanceStructureNodeAt(wrl, bcx+mx, bcy+my, bcz+mz, c);
+		
+		btm_curtopname=otop;
+		return(0);
+	}
+
+	return(0);
+}
+
+int BTM_InstanceStructureAt(BTM_World *wrl,
+	int bcx, int bcy, int bcz, char *name, char *subname)
+{
+	BCCX_Node *c;
+	char *otop;
+
+	otop=btm_curtopname;
+	btm_curtopname=name;
+	
+	c=BTM_LookupMenuNode(name, subname);
+	BTM_InstanceStructureNodeAt(wrl, bcx, bcy, bcz, c);
+	
+	btm_curtopname=otop;
 	return(0);
 }

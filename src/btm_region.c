@@ -1,3 +1,18 @@
+/*
+Copyright (C) 2022  Brendan G Bohannon
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*/
 
 byte *FS_LoadFile(char *name, int *rsz, int pad);
 
@@ -391,6 +406,7 @@ int BTM_TryLoadRegionImage(BTM_World *wrl, BTM_Region *rgn)
 
 	rx=(rgn->rgnix>>0)&511;
 	ry=(rgn->rgnix>>9)&511;
+	ry|=((rgn->rgnix>>18)&7)<<9;
 	sprintf(tb, "region/rg%03X%03X.dat", ry, rx);
 	printf("BTM_TryLoadRegionImage: %s\n", tb);
 	buf=BTM_LoadFileNp(tb, &sz);
@@ -1414,6 +1430,7 @@ int BTM_FlattenRegion(BTM_World *wrl, BTM_Region *rgn)
 
 	rx=(rgn->rgnix>>0)&511;
 	ry=(rgn->rgnix>>9)&511;
+	ry|=((rgn->rgnix>>18)&7)<<9;
 	sprintf(tb, "region/rg%03X%03X.dat", ry, rx);
 //	sprintf(tb, "region/rgn%05X.dat", rgn->rgnix);
 
