@@ -117,7 +117,7 @@ char *BCCX_ParseToken(char **strm, int *ty)
 	char buf[16];
 //	char *t, *t2, *b;
 	char *t, *t2;
-	int i, j;
+	int i, j, qtc;
 
 //	b=bccx_ralloc(256); t=b;
 //	*b=0;
@@ -135,11 +135,13 @@ char *BCCX_ParseToken(char **strm, int *ty)
 		if(ty)*ty=BGBDY_TTY_SPECIAL;
 		*t++=BCCX_ReadChar(strm);
 		*t=0;
-	}else if(BCCX_PeekChar(strm)=='"') /* quoted string */
+	}else if(	(BCCX_PeekChar(strm)=='"') ||
+				(BCCX_PeekChar(strm)=='\'')) /* quoted string */
 	{
 		if(ty)*ty=BGBDY_TTY_STRING;
-		BCCX_ReadChar(strm);
-		while((BCCX_PeekChar(strm)>0) && (BCCX_PeekChar(strm)!='\"'))
+		qtc=BCCX_ReadChar(strm);
+//		while((BCCX_PeekChar(strm)>0) && (BCCX_PeekChar(strm)!='\"'))
+		while((BCCX_PeekChar(strm)>0) && (BCCX_PeekChar(strm)!=qtc))
 		{
 			if(BCCX_PeekChar(strm)=='&')
 			{
@@ -314,6 +316,103 @@ char *BCCX_ParseText(char **strm)
 	return(bccx_rstrdup(tb));
 }
 
+int BCCX_ParseCheckTokenValidIntP(char *str)
+{
+	char *s;
+	
+	s=str;
+	if(*s=='-')
+		s++;
+	if((s[0]=='0') && ((s[1]=='x') || (s[1]=='X')))
+	{
+		s+=2;
+		while(*s)
+		{
+			if((*s>='0') && (*s<='9'))
+				{ s++; continue; }
+			if((*s>='A') && (*s<='F'))
+				{ s++; continue; }
+			if((*s>='a') && (*s<='f'))
+				{ s++; continue; }
+			break;
+		}
+		if(!(*s))
+			return(1);
+
+		return(0);
+	}
+	
+	if(s[0]=='0')
+	{
+		while(*s)
+		{
+			if((*s>='0') && (*s<='7'))
+				{ s++; continue; }
+			break;
+		}
+		if(!(*s))
+			return(1);
+		return(0);
+	}
+
+	while(*s)
+	{
+		if((*s>='0') && (*s<='9'))
+			{ s++; continue; }
+		break;
+	}
+
+	if(!(*s))
+		return(1);
+
+	return(0);
+}
+
+int BCCX_ParseCheckTokenValidRealP(char *str)
+{
+	char *s;
+	
+	s=str;
+	if(*s=='-')
+		s++;
+
+	while(*s)
+	{
+		if((*s>='0') && (*s<='9'))
+			{ s++; continue; }
+		break;
+	}
+	
+	if(*s=='.')
+	{
+		s++;
+
+		while(*s)
+		{
+			if((*s>='0') && (*s<='9'))
+				{ s++; continue; }
+			break;
+		}		
+	}
+
+	if((*s=='e') || *s=='E')
+	{
+		s++;
+
+		while(*s)
+		{
+			if((*s>='0') && (*s<='9'))
+				{ s++; continue; }
+			break;
+		}		
+	}
+
+	if(!(*s))
+		return(1);
+
+	return(0);
+}
+
 #if 1
 int BCCX_ParseAttr(char **strm, BCCX_Node *node)
 {
@@ -375,6 +474,19 @@ int BCCX_ParseAttr(char **strm, BCCX_Node *node)
 
 		if(ty!=BGBDY_TTY_STRING)
 		{
+			if(BCCX_ParseCheckTokenValidIntP(val))
+			{
+				BCCX_SetInt(node, var, bccx_atoll(val));
+				continue;
+			}
+		
+			if(BCCX_ParseCheckTokenValidRealP(val))
+			{
+				BCCX_SetFloat(node, var, bccx_atof(val));
+				continue;
+			}
+
+#if 0
 			if(((val[0]>='0') && (val[0]<='9')) ||
 				((val[0]=='-') && (val[1]>='0') && (val[1]<='9')))
 			{
@@ -389,7 +501,14 @@ int BCCX_ParseAttr(char **strm, BCCX_Node *node)
 				BCCX_SetFloat(node, var, bccx_atof(val));
 				continue;
 			}
-		
+#endif
+
+			if(val[0]=='$')
+			{
+				BCCX_Set(node, var, val);
+				continue;
+			}
+
 			printf("parse error (inv attribute arg).\n");
 			*(int *)-1=-1;
 			return(-1);

@@ -864,6 +864,22 @@ char *BCCX_GetCst(BCCX_Node *n,
 	return(NULL);
 }
 
+int BCCX_GetAttrNameCst(BCCX_Node *n,
+	bccx_cxstate *rcst, char *var)
+{
+	u16 *an;
+	BCCX_AttrVal *av;
+	char *tb;
+	int i;
+
+	i=BCCX_LookupAttrValCst(n, rcst, var, &an, &av);
+	if(i>=0)
+	{
+		return(*an);
+	}
+	return(0);
+}
+
 #if 1
 
 s64 BCCX_GetIntCst(BCCX_Node *n, bccx_cxstate *rcst, char *var)
@@ -919,6 +935,13 @@ s64 BCCX_GetInt(BCCX_Node *n, char *var)
 	bccx_cxstate iv;
 	iv=0;
 	return(BCCX_GetIntCst(n, &iv, var));
+}
+
+double BCCX_GetFloat(BCCX_Node *n, char *var)
+{
+	bccx_cxstate iv;
+	iv=0;
+	return(BCCX_GetFloatCst(n, &iv, var));
 }
 #endif
 

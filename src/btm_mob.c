@@ -681,6 +681,13 @@ bccx_cxstate	bccx_org_z;
 bccx_cxstate	bccx_yaw;
 bccx_cxstate	bccx_pitch;
 
+bccx_cxstate	bccx_name;
+bccx_cxstate	bccx_value;
+bccx_cxstate	bccx_global;
+bccx_cxstate	bccx_player;
+bccx_cxstate	bccx_time;
+bccx_cxstate	bccx_day;
+
 int BTM_SpawnRegionEntity(BTM_World *wrl,
 	BTM_Region *rgn, BCCX_Node *ent)
 {
@@ -773,6 +780,162 @@ BCCX_Node *BTM_FlattenRegionLiveEntities(
 
 		mob=mob->next;
 	}
+
+	return(elst);
+}
+
+int BTM_SpawnWorldGlobal(BTM_World *wrl, BCCX_Node *ent)
+{
+	double org[3];
+	char *name, *str;
+	s64 li, cpos;
+	double lf;
+	int ani, vx, vy, vz;
+
+	if(BCCX_TagIsCstP(ent, &bccx_global, "global"))
+	{
+		name=BCCX_GetCst(ent, &bccx_name, "name");
+		ani=BCCX_GetAttrNameCst(ent, &bccx_value, "value");
+		
+		if((ani>>12)==BCCX_IVTY_INT)
+		{
+			li=BCCX_GetIntCst(ent, &bccx_value, "value");
+			BTM_InstSetgVarInt(wrl, name, li);
+		}else
+			if((ani>>12)==BCCX_IVTY_REAL)
+		{
+			lf=BCCX_GetFloatCst(ent, &bccx_value, "value");
+			BTM_InstSetgVarReal(wrl, name, lf);
+		}else if((ani>>12)==BCCX_IVTY_STRING)
+		{
+			str=BCCX_GetCst(ent, &bccx_value, "value");
+			BTM_InstSetgVarStr(wrl, name, str);
+		}
+		
+		return(0);
+	}
+
+	if(BCCX_TagIsCstP(ent, &bccx_player, "player"))
+	{
+		org[0]=BCCX_GetFloatCst(ent, &bccx_org_x, "org_x");
+		org[1]=BCCX_GetFloatCst(ent, &bccx_org_y, "org_y");
+		org[2]=BCCX_GetFloatCst(ent, &bccx_org_z, "org_z");
+		wrl->cam_yaw=BCCX_GetIntCst(ent, &bccx_yaw, "yaw");
+		wrl->cam_pitch=BCCX_GetIntCst(ent, &bccx_pitch, "pitch");
+		
+		vx=org[0]*256.0;
+		vy=org[1]*256.0;
+		vz=org[2]*256.0;
+		cpos=
+			((vx&0x00FFFFFFULL)<< 0) |
+			((vy&0x00FFFFFFULL)<<24) |
+			((vz&0x0000FFFFULL)<<48) ;
+		wrl->cam_org=cpos;
+		
+		wrl->daytimer=BCCX_GetIntCst(ent, &bccx_time, "time");
+		wrl->day=BCCX_GetIntCst(ent, &bccx_day, "day");
+
+		return(0);
+	}
+
+	return(-1);
+}
+
+int BTM_SpawnWorldGlobalState(BTM_World *wrl, BCCX_Node *ents)
+{
+	BCCX_Node *ntmp;
+	int na, ci;
+
+	if(!ents)
+		return(0);
+
+	na=BCCX_GetNodeChildCount(ents);
+	for(ci=0; ci<na; ci++)
+	{
+		ntmp=BCCX_GetNodeIndex(ents, ci);
+		BTM_SpawnWorldGlobal(wrl, ntmp);
+	}
+
+	return(0);
+}
+
+BCCX_Node *BTM_FlattenWorldGlobalState(BTM_World *wrl)
+{
+	BCCX_Node *ntmp, *elst;
+	BCCX_AttrVal *av;
+	char *str;
+	int vx, vy, vz;
+	int i, j, k, ix;
+
+	elst=BCCX_New("worldstate");
+
+	if(1)
+	{
+		ntmp=BCCX_NewCst(&bccx_player, "player");
+//		BCCX_SetCst(ntmp, &bccx_name, "name", str);
+
+		vx=(wrl->cam_org>> 0)&0x00FFFFFFU;
+		vy=(wrl->cam_org>>24)&0x00FFFFFFU;
+		vz=(wrl->cam_org>>48)&0x0000FFFFU;
+
+		BCCX_SetFloatCst(ntmp, &bccx_org_x, "org_x", vx*(1.0/256));
+		BCCX_SetFloatCst(ntmp, &bccx_org_y, "org_y", vy*(1.0/256));
+		BCCX_SetFloatCst(ntmp, &bccx_org_z, "org_z", vz*(1.0/256));
+		BCCX_SetIntCst(ntmp, &bccx_yaw, "yaw", wrl->cam_yaw);
+		BCCX_SetIntCst(ntmp, &bccx_pitch, "pitch", wrl->cam_pitch);
+
+		BCCX_SetIntCst(ntmp, &bccx_time, "time", wrl->daytimer);
+		BCCX_SetIntCst(ntmp, &bccx_day, "day", wrl->day);
+		
+		BCCX_Add(elst, ntmp);
+	}
+
+	for(i=0; i<wrl->tgen_vargbl_cnt; i++)
+	{
+		av=(BCCX_AttrVal *)(wrl->tgen_vargbl_val+i);
+		ix=wrl->tgen_vargbl_name[i];
+		str=BCCX_StridxToString(ix);
+		
+		ntmp=BCCX_NewCst(&bccx_global, "global");
+		BCCX_SetCst(ntmp, &bccx_name, "name", str);
+
+		if((ix>>12)==BCCX_IVTY_INT)
+		{
+			BCCX_SetIntCst(ntmp, &bccx_value, "value", av->i);
+		}else if((ix>>12)==BCCX_IVTY_REAL)
+		{
+			BCCX_SetFloatCst(ntmp, &bccx_value, "value", av->f);
+		}else if((ix>>12)==BCCX_IVTY_STRING)
+		{
+			BCCX_SetCst(ntmp, &bccx_value, "value", av->s);
+		}else if((ix>>12)==BCCX_IVTY_NODE)
+		{
+//			BCCX_SetCst(ntmp, &bccx_value, "value", av->s);
+			BCCX_Add(ntmp, BCCX_New1("value", BCCX_CloneS(av->p)));
+		}
+
+		BCCX_Add(elst, ntmp);
+	}
+	
+#if 0
+	while(mob)
+	{
+		ntmp=BCCX_NewCst(&bccx_mobj, "mobj");
+		BCCX_SetCst(ntmp, &bccx_classname, "classname", mob->cname);
+		BCCX_SetFloatCst(ntmp, &bccx_org_x, "org_x", mob->org_x*(1.0/256));
+		BCCX_SetFloatCst(ntmp, &bccx_org_y, "org_y", mob->org_y*(1.0/256));
+		BCCX_SetFloatCst(ntmp, &bccx_org_z, "org_z", mob->org_z*(1.0/256));
+
+		if(mob->yaw)
+			BCCX_SetIntCst(ntmp, &bccx_yaw, "yaw", mob->yaw);
+		if(mob->pitch)
+			BCCX_SetIntCst(ntmp, &bccx_pitch, "pitch", mob->pitch);
+		
+		BCCX_Add(elst, ntmp);
+
+		mob=mob->next;
+	}
+#endif
 
 	return(elst);
 }

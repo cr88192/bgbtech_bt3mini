@@ -498,6 +498,413 @@ int BTM_InstRelight(BTM_World *wrl,
 	return(0);
 }
 
+s64 BTM_InstGetVarInt(BTM_World *wrl, char *name)
+{
+	BCCX_AttrVal *av;
+	int ix;
+	int i, j, k;
+
+	ix=BCCX_StringToStridx(name);
+	i=wrl->tgen_varstk_pos-1;
+	while(i>=0)
+	{
+		j=wrl->tgen_varstk_name[i];
+		if((j&4095)==ix)
+		{
+			av=(BCCX_AttrVal *)(wrl->tgen_varstk_val+i);
+			if((j>>12)==BCCX_IVTY_INT)
+				return(av->i);
+			if((j>>12)==BCCX_IVTY_REAL)
+				return(av->f);
+			if((j>>12)==BCCX_IVTY_STRING)
+				return(bccx_atoll(av->s));
+			return(0);
+		}
+		i--;
+	}
+
+	i=wrl->tgen_vargbl_cnt-1;
+	while(i>=0)
+	{
+		j=wrl->tgen_vargbl_name[i];
+		if((j&4095)==ix)
+		{
+			av=(BCCX_AttrVal *)(wrl->tgen_vargbl_val+i);
+			if((j>>12)==BCCX_IVTY_INT)
+				return(av->i);
+			if((j>>12)==BCCX_IVTY_REAL)
+				return(av->f);
+			if((j>>12)==BCCX_IVTY_STRING)
+				return(bccx_atoll(av->s));
+			return(0);
+		}
+		i--;
+	}
+	
+	return(0);
+}
+
+double BTM_InstGetVarFloat(BTM_World *wrl, char *name)
+{
+	BCCX_AttrVal *av;
+	int ix;
+	int i, j, k;
+
+	ix=BCCX_StringToStridx(name);
+
+	i=wrl->tgen_varstk_pos-1;
+	while(i>=0)
+	{
+		j=wrl->tgen_varstk_name[i];
+		if((j&4095)==ix)
+		{
+			av=(BCCX_AttrVal *)(wrl->tgen_varstk_val+i);
+			if((j>>12)==BCCX_IVTY_INT)
+				return(av->i);
+			if((j>>12)==BCCX_IVTY_REAL)
+				return(av->f);
+			if((j>>12)==BCCX_IVTY_STRING)
+				return(bccx_atof(av->s));
+			return(0);
+		}
+		i--;
+	}
+
+	i=wrl->tgen_vargbl_cnt-1;
+	while(i>=0)
+	{
+		j=wrl->tgen_vargbl_name[i];
+		if((j&4095)==ix)
+		{
+			av=(BCCX_AttrVal *)(wrl->tgen_vargbl_val+i);
+			if((j>>12)==BCCX_IVTY_INT)
+				return(av->i);
+			if((j>>12)==BCCX_IVTY_REAL)
+				return(av->f);
+			if((j>>12)==BCCX_IVTY_STRING)
+				return(bccx_atof(av->s));
+			return(0);
+		}
+		i--;
+	}
+	
+	return(0);
+}
+
+char *BTM_InstGetVarStr(BTM_World *wrl, char *name)
+{
+	char tb[64];
+	BCCX_AttrVal *av;
+	int ix;
+	int i, j, k;
+
+	ix=BCCX_StringToStridx(name);
+
+	i=wrl->tgen_varstk_pos-1;
+	while(i>=0)
+	{
+		j=wrl->tgen_varstk_name[i];
+		if((j&4095)==ix)
+		{
+			av=(BCCX_AttrVal *)(wrl->tgen_varstk_val+i);
+			if((j>>12)==BCCX_IVTY_INT)
+			{
+				sprintf(tb, "%lld", av->i);
+				return(bccx_rstrdup(tb));
+			}
+			if((j>>12)==BCCX_IVTY_REAL)
+			{
+				sprintf(tb, "%f", av->f);
+				return(bccx_rstrdup(tb));
+			}
+			if((j>>12)==BCCX_IVTY_STRING)
+				return(av->s);
+			return(NULL);
+		}
+		i--;
+	}
+
+	i=wrl->tgen_vargbl_cnt-1;
+	while(i>=0)
+	{
+		j=wrl->tgen_vargbl_name[i];
+		if((j&4095)==ix)
+		{
+			av=(BCCX_AttrVal *)(wrl->tgen_vargbl_val+i);
+			if((j>>12)==BCCX_IVTY_INT)
+			{
+				sprintf(tb, "%lld", av->i);
+				return(bccx_rstrdup(tb));
+			}
+			if((j>>12)==BCCX_IVTY_REAL)
+			{
+				sprintf(tb, "%f", av->f);
+				return(bccx_rstrdup(tb));
+			}
+			if((j>>12)==BCCX_IVTY_STRING)
+				return(av->s);
+			return(NULL);
+		}
+		i--;
+	}
+	
+	return(NULL);
+}
+
+s64 BTM_InstGetNodeAttrInt(BTM_World *wrl, BCCX_Node *node, char *name)
+{
+	char *str;
+	s64 li;
+	
+	li=BCCX_GetInt(node, name);
+	if(li!=0)
+		return(li);
+
+	str=BCCX_Get(node, name);
+	if(str && (*str=='$'))
+		return(BTM_InstGetVarInt(wrl, str+1));
+	
+	return(0);
+}
+
+double BTM_InstGetNodeAttrFloat(BTM_World *wrl, BCCX_Node *node, char *name)
+{
+	char *str;
+	double lf;
+	
+	lf=BCCX_GetFloat(node, name);
+	if(lf!=0)
+		return(lf);
+
+	str=BCCX_Get(node, name);
+	if(str && (*str=='$'))
+		return(BTM_InstGetVarFloat(wrl, str+1));
+	
+	return(0);
+}
+
+char *BTM_InstGetNodeAttrStr(BTM_World *wrl, BCCX_Node *node, char *name)
+{
+	char *str;
+	
+	str=BCCX_Get(node, name);
+	if(str && (*str=='$'))
+		return(BTM_InstGetVarStr(wrl, str+1));
+	return(str);
+}
+
+int BTM_InstBindVarIntI(BTM_World *wrl, char *name, s64 val, int flag)
+{
+	int i, j, k, ix;
+
+	ix=BCCX_StringToStridx(name);
+
+	i=wrl->tgen_varstk_pos-1;
+	k=wrl->tgen_varstk_mark;
+	if(flag&1)
+		k=0;
+	while(i>=k)
+	{
+		j=wrl->tgen_varstk_name[i];
+		if((j&4095)==ix)
+		{
+			wrl->tgen_varstk_name[i]=ix|(BCCX_IVTY_INT<<12);
+			wrl->tgen_varstk_val[i]=val;
+			return(0);
+		}
+		i--;
+	}
+
+	if(flag&1)
+	{
+		i=wrl->tgen_vargbl_cnt-1;
+		while(i>=0)
+		{
+			j=wrl->tgen_vargbl_name[i];
+			if((j&4095)==ix)
+			{
+				wrl->tgen_vargbl_name[i]=ix|(BCCX_IVTY_INT<<12);
+				wrl->tgen_vargbl_val[i]=val;
+				return(0);
+			}
+			i--;
+		}
+	}
+
+	if(flag&2)
+	{
+		i=wrl->tgen_vargbl_cnt++;
+		wrl->tgen_vargbl_name[i]=ix|(BCCX_IVTY_INT<<12);
+		wrl->tgen_vargbl_val[i]=val;
+	}else
+	{
+		i=wrl->tgen_varstk_pos++;
+		wrl->tgen_varstk_name[i]=ix|(BCCX_IVTY_INT<<12);
+		wrl->tgen_varstk_val[i]=val;
+	}
+	return(0);
+}
+
+int BTM_InstBindVarRealI(BTM_World *wrl, char *name, double val, int flag)
+{
+	BCCX_AttrVal *av;
+	int i, j, k, ix;
+
+	ix=BCCX_StringToStridx(name);
+
+	i=wrl->tgen_varstk_pos-1;
+	k=wrl->tgen_varstk_mark;
+	if(flag&1)
+		k=0;
+	while(i>=k)
+	{
+		j=wrl->tgen_varstk_name[i];
+		if((j&4095)==ix)
+		{
+			av=(BCCX_AttrVal *)(wrl->tgen_varstk_val+i);
+			wrl->tgen_varstk_name[i]=ix|(BCCX_IVTY_REAL<<12);
+			av->f=val;
+			return(0);
+		}
+		i--;
+	}
+
+	if(flag&1)
+	{
+		i=wrl->tgen_vargbl_cnt-1;
+		while(i>=0)
+		{
+			j=wrl->tgen_vargbl_name[i];
+			if((j&4095)==ix)
+			{
+				av=(BCCX_AttrVal *)(wrl->tgen_vargbl_val+i);
+				wrl->tgen_vargbl_name[i]=ix|(BCCX_IVTY_REAL<<12);
+				av->f=val;
+				return(0);
+			}
+			i--;
+		}
+	}
+
+	if(flag&2)
+	{
+		i=wrl->tgen_vargbl_cnt++;
+		av=(BCCX_AttrVal *)(wrl->tgen_vargbl_val+i);
+		wrl->tgen_vargbl_name[i]=ix|(BCCX_IVTY_REAL<<12);
+		av->f=val;
+	}else
+	{
+		i=wrl->tgen_varstk_pos++;
+		av=(BCCX_AttrVal *)(wrl->tgen_varstk_val+i);
+		wrl->tgen_varstk_name[i]=ix|(BCCX_IVTY_REAL<<12);
+		av->f=val;
+	}
+	return(0);
+}
+
+int BTM_InstBindVarStrI(BTM_World *wrl, char *name, char *val, int flag)
+{
+	BCCX_AttrVal *av;
+	int i, j, k, ix;
+
+	ix=BCCX_StringToStridx(name);
+
+	i=wrl->tgen_varstk_pos-1;
+	k=wrl->tgen_varstk_mark;
+	if(flag&1)
+		k=0;
+	while(i>=k)
+	{
+		j=wrl->tgen_varstk_name[i];
+		if((j&4095)==ix)
+		{
+			av=(BCCX_AttrVal *)(wrl->tgen_varstk_val+i);
+			wrl->tgen_varstk_name[i]=ix|(BCCX_IVTY_STRING<<12);
+			av->s=bccx_strdup(val);
+			return(0);
+		}
+		i--;
+	}
+
+	if(flag&1)
+	{
+		i=wrl->tgen_vargbl_cnt-1;
+		while(i>=0)
+		{
+			j=wrl->tgen_vargbl_name[i];
+			if((j&4095)==ix)
+			{
+				av=(BCCX_AttrVal *)(wrl->tgen_vargbl_val+i);
+				wrl->tgen_vargbl_name[i]=ix|(BCCX_IVTY_STRING<<12);
+				av->s=bccx_strdup(val);
+				return(0);
+			}
+			i--;
+		}
+	}
+
+	if(flag&2)
+	{
+		i=wrl->tgen_vargbl_cnt++;
+		av=(BCCX_AttrVal *)(wrl->tgen_vargbl_val+i);
+		wrl->tgen_vargbl_name[i]=ix|(BCCX_IVTY_REAL<<12);
+		av->s=bccx_strdup(val);
+	}else
+	{
+		i=wrl->tgen_varstk_pos++;
+		av=(BCCX_AttrVal *)(wrl->tgen_varstk_val+i);
+		wrl->tgen_varstk_name[i]=ix|(BCCX_IVTY_STRING<<12);
+		av->s=bccx_strdup(val);
+	}
+	return(0);
+}
+
+int BTM_InstBindVarInt(BTM_World *wrl, char *name, s64 val)
+{
+	return(BTM_InstBindVarIntI(wrl, name, val, 0));
+}
+
+int BTM_InstBindVarReal(BTM_World *wrl, char *name, double val)
+{
+	return(BTM_InstBindVarRealI(wrl, name, val, 0));
+}
+
+int BTM_InstBindVarStr(BTM_World *wrl, char *name, char *val)
+{
+	return(BTM_InstBindVarStrI(wrl, name, val, 0));
+}
+
+int BTM_InstSetVarInt(BTM_World *wrl, char *name, s64 val)
+{
+	return(BTM_InstBindVarIntI(wrl, name, val, 1));
+}
+
+int BTM_InstSetVarReal(BTM_World *wrl, char *name, double val)
+{
+	return(BTM_InstBindVarRealI(wrl, name, val, 1));
+}
+
+int BTM_InstSetVarStr(BTM_World *wrl, char *name, char *val)
+{
+	return(BTM_InstBindVarStrI(wrl, name, val, 1));
+}
+
+int BTM_InstSetgVarInt(BTM_World *wrl, char *name, s64 val)
+{
+	return(BTM_InstBindVarIntI(wrl, name, val, 3));
+}
+
+int BTM_InstSetgVarReal(BTM_World *wrl, char *name, double val)
+{
+	return(BTM_InstBindVarRealI(wrl, name, val, 3));
+}
+
+int BTM_InstSetgVarStr(BTM_World *wrl, char *name, char *val)
+{
+	return(BTM_InstBindVarStrI(wrl, name, val, 3));
+}
+
+
 char *btm_curtopname;
 
 int BTM_InstanceStructureNodeAt(BTM_World *wrl,
@@ -507,6 +914,7 @@ int BTM_InstanceStructureNodeAt(BTM_World *wrl,
 	char *bty, *rpbty, *s0, *s1, *s2;
 	char *otop;
 	u32 blk, rpblk;
+	int ovspos, ovsmark;
 	int na, ci;
 	int mx, my, mz, nx, ny, nz;
 
@@ -530,7 +938,29 @@ int BTM_InstanceStructureNodeAt(BTM_World *wrl,
 	{
 		na=BCCX_GetNodeChildCount(node);
 		if(na<=0)
+		{
+			s0=BCCX_Get(node, "name");
+			mx=BTM_InstGetNodeAttrInt(wrl, node, "min");
+			nx=BTM_InstGetNodeAttrInt(wrl, node, "max");
+			if((mx==0) && (nx==0))
+				{ mx=0; nx=65535; }
+			nz=(nx-mx)+1;
+			if(s0)
+			{
+				if((nz>0) && (nz<=65536))
+				{
+					ci=mx+(btm_tgrand(wrl)%nz);
+				}else if(nz>0)
+				{
+					ci=btm_tgrand(wrl);
+					ci=(ci<<16)^btm_tgrand(wrl);
+					ci=mx+(ci%nz);
+				}
+				BTM_InstBindVarInt(wrl, s0, ci);
+			}
+			
 			return(0);
+		}
 
 		ci=btm_tgrand(wrl)%na;
 		c=BCCX_GetNodeIndex(node, ci);
@@ -540,19 +970,19 @@ int BTM_InstanceStructureNodeAt(BTM_World *wrl,
 
 	if(BCCX_TagIsP(node, "fill"))
 	{
-		mx=BCCX_GetInt(node, "min_x");
-		my=BCCX_GetInt(node, "min_y");
-		mz=BCCX_GetInt(node, "min_z");
-		nx=BCCX_GetInt(node, "max_x");
-		ny=BCCX_GetInt(node, "max_y");
-		nz=BCCX_GetInt(node, "max_z");
+		mx=BTM_InstGetNodeAttrInt(wrl, node, "min_x");
+		my=BTM_InstGetNodeAttrInt(wrl, node, "min_y");
+		mz=BTM_InstGetNodeAttrInt(wrl, node, "min_z");
+		nx=BTM_InstGetNodeAttrInt(wrl, node, "max_x");
+		ny=BTM_InstGetNodeAttrInt(wrl, node, "max_y");
+		nz=BTM_InstGetNodeAttrInt(wrl, node, "max_z");
 
 		if((mx==nx) && (mx==0))
-			{ mx=BCCX_GetInt(node, "rel_x"); nx=mx; }
+			{ mx=BTM_InstGetNodeAttrInt(wrl, node, "rel_x"); nx=mx; }
 		if((my==ny) && (my==0))
-			{ my=BCCX_GetInt(node, "rel_y"); ny=my; }
+			{ my=BTM_InstGetNodeAttrInt(wrl, node, "rel_y"); ny=my; }
 		if((mz==nz) && (mz==0))
-			{ mz=BCCX_GetInt(node, "rel_z"); nz=mz; }
+			{ mz=BTM_InstGetNodeAttrInt(wrl, node, "rel_z"); nz=mz; }
 
 		bty=BCCX_Get(node, "block");
 		blk=BTM_BlockForName(wrl, bty);
@@ -574,19 +1004,19 @@ int BTM_InstanceStructureNodeAt(BTM_World *wrl,
 
 	if(BCCX_TagIsP(node, "relight"))
 	{
-		mx=BCCX_GetInt(node, "min_x");
-		my=BCCX_GetInt(node, "min_y");
-		mz=BCCX_GetInt(node, "min_z");
-		nx=BCCX_GetInt(node, "max_x");
-		ny=BCCX_GetInt(node, "max_y");
-		nz=BCCX_GetInt(node, "max_z");
+		mx=BTM_InstGetNodeAttrInt(wrl, node, "min_x");
+		my=BTM_InstGetNodeAttrInt(wrl, node, "min_y");
+		mz=BTM_InstGetNodeAttrInt(wrl, node, "min_z");
+		nx=BTM_InstGetNodeAttrInt(wrl, node, "max_x");
+		ny=BTM_InstGetNodeAttrInt(wrl, node, "max_y");
+		nz=BTM_InstGetNodeAttrInt(wrl, node, "max_z");
 
 		if((mx==nx) && (mx==0))
-			{ mx=BCCX_GetInt(node, "rel_x"); nx=mx; }
+			{ mx=BTM_InstGetNodeAttrInt(wrl, node, "rel_x"); nx=mx; }
 		if((my==ny) && (my==0))
-			{ my=BCCX_GetInt(node, "rel_y"); ny=my; }
+			{ my=BTM_InstGetNodeAttrInt(wrl, node, "rel_y"); ny=my; }
 		if((mz==nz) && (mz==0))
-			{ mz=BCCX_GetInt(node, "rel_z"); nz=mz; }
+			{ mz=BTM_InstGetNodeAttrInt(wrl, node, "rel_z"); nz=mz; }
 
 		BTM_InstRelight(wrl,
 			bcx+mx, bcy+my, bcz+mz,
@@ -597,9 +1027,9 @@ int BTM_InstanceStructureNodeAt(BTM_World *wrl,
 
 	if(BCCX_TagIsP(node, "instance"))
 	{
-		mx=BCCX_GetInt(node, "rel_x");
-		my=BCCX_GetInt(node, "rel_y");
-		mz=BCCX_GetInt(node, "rel_z");
+		mx=BTM_InstGetNodeAttrInt(wrl, node, "rel_x");
+		my=BTM_InstGetNodeAttrInt(wrl, node, "rel_y");
+		mz=BTM_InstGetNodeAttrInt(wrl, node, "rel_z");
 
 		s1=BCCX_Get(node, "name");
 		
@@ -627,9 +1057,16 @@ int BTM_InstanceStructureNodeAt(BTM_World *wrl,
 		
 		otop=btm_curtopname;
 		btm_curtopname=s1;
+
+		ovspos=wrl->tgen_varstk_pos;
+		ovsmark=wrl->tgen_varstk_mark;
+		wrl->tgen_varstk_mark=ovspos;
 		
 		c=BTM_LookupMenuNode(s1, s2);
 		BTM_InstanceStructureNodeAt(wrl, bcx+mx, bcy+my, bcz+mz, c);
+
+		wrl->tgen_varstk_pos=ovspos;
+		wrl->tgen_varstk_mark=ovsmark;
 		
 		btm_curtopname=otop;
 		return(0);
@@ -644,6 +1081,7 @@ int BTM_InstanceStructureAt(BTM_World *wrl,
 	BCCX_Node *c;
 	char *otop;
 	u64 oseed;
+	int ovspos, ovsmark;
 
 	otop=btm_curtopname;
 	oseed=wrl->tg_curseed;
@@ -667,8 +1105,15 @@ int BTM_InstanceStructureAt(BTM_World *wrl,
 		}
 	}
 
+	ovspos=wrl->tgen_varstk_pos;
+	ovsmark=wrl->tgen_varstk_mark;
+	wrl->tgen_varstk_mark=ovspos;
+
 	c=BTM_LookupMenuNode(name, subname);
 	BTM_InstanceStructureNodeAt(wrl, bcx, bcy, bcz, c);
+
+	wrl->tgen_varstk_pos=ovspos;
+	wrl->tgen_varstk_mark=ovsmark;
 	
 	btm_curtopname=otop;
 	wrl->tg_curseed=oseed;

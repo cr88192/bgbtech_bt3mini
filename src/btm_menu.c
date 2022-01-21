@@ -348,7 +348,7 @@ int BTM_DrawMenu()
 	char *s0, *s1, *s2, *s3;
 	char *scvn, *scvv;
 	float f0, f1, f2, f3;
-	int na, ci, nopt, tex;
+	int na, ci, nopt, tex, fibase;
 	int i, j, k, l;
 
 	BTM_MenuInit();
@@ -521,12 +521,15 @@ int BTM_DrawMenu()
 		if(s1)
 			nface=BCCX_FindAttr(btm_showmenu->root, "name", s1);
 		
+		fibase=BCCX_GetInt(mcur, "face_idx");
+		
 		if(nface)
 		{
 			s2=BCCX_Get(nface, "image");
 			tex=BTMGL_LoadSpriteForName(s2, 0, 0);
 
-			i=(btm_menu_selchardt>50);
+			i=(btm_menu_selchardt>50) && (btm_menu_selchars<strlen(s0));
+			i+=fibase;
 			j=(i   )&3;
 			k=(i>>2)&3;
 

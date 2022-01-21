@@ -282,6 +282,16 @@ byte	*lz_tenc2buf;
 int		lz_szdecbuf;
 int		lz_szencbuf;
 int		lz_szenc2buf;
+
+u16		tgen_varstk_name[512];
+u64		tgen_varstk_val[512];
+int		tgen_varstk_pos;
+int		tgen_varstk_mark;
+
+u16		tgen_vargbl_name[512];
+u64		tgen_vargbl_val[512];
+int		tgen_vargbl_cnt;
+
 };
 
 struct BTM_Screen_s {

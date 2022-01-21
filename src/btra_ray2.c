@@ -46,6 +46,8 @@ int BTM_SpawnRegionEntities(BTM_World *wrl,
 BCCX_Node *BTM_FlattenRegionLiveEntities(
 	BTM_World *wrl, BTM_Region *rgn);
 
+BCCX_Node *BTM_FlattenWorldGlobalState(BTM_World *wrl);
+
 u32 BTM_ModulateColorRgbForBlockLight(u32 rgb, int ll);
 
 // #define	BTM_Rcix2Rix(rcix)	((rcix>>21)&65535);

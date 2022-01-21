@@ -903,6 +903,23 @@ int main(int argc, char *argv[])
 	
 	BTM_ConPrintString("Console String\n");
 
+	wrl->cam_org=
+		((u64)((u32)(cam_org[0]*256)&0xFFFFFFU)<< 0) |
+		((u64)((u32)(cam_org[1]*256)&0xFFFFFFU)<<24) |
+		((u64)((u32)(cam_org[2]*256)&0x00FFFFU)<<48) ;
+
+	wrl->cam_yaw=(byte)(cam_ang_yaw*(256.0/360.0));
+	wrl->cam_pitch=(byte)(cam_ang_pitch*(256.0/360.0));
+
+	BTM_LoadWorldGlobals(wrl);
+
+	cam_org[0]=((wrl->cam_org>> 0)&0x00FFFFFFU)*(1.0/256);
+	cam_org[1]=((wrl->cam_org>>24)&0x00FFFFFFU)*(1.0/256);
+	cam_org[2]=((wrl->cam_org>>48)&0x0000FFFFU)*(1.0/256);
+
+	cam_ang_yaw=wrl->cam_yaw*(360.0/256.0);
+	cam_ang_pitch=wrl->cam_pitch*(360.0/256.0);
+
 	wrldt=0;
 	tt=I_TimeMS();
 	ltt=tt;

@@ -1493,14 +1493,50 @@ int BTM_FlattenRegion(BTM_World *wrl, BTM_Region *rgn)
 	return(0);
 }
 
+
+int BTM_LoadWorldGlobals(BTM_World *wrl)
+{
+	BCCX_Node *lent;
+	byte *ebuf;
+	int esz;
+
+//	ebuf=BTM_RegionDoLoadBufferIx(wrl, rgn, 2, 0, &lesz);
+	ebuf=BTM_LoadFileTmp("region/global.dat", &esz);
+
+	if(ebuf)
+	{
+		lent=BCCX_AbxeParseBuffer(ebuf, esz);
+		BTM_SpawnWorldGlobalState(wrl, lent);
+	}
+	
+	return(0);
+}
+
 int BTM_CheckUnloadRegions(BTM_World *wrl)
 {
+	static byte *tentbuf;
 	BTM_Region *rcur, *rnxt, *rulst, *rklst;
+	BCCX_Node *tnode;
 	u64 rpos;
-	int cx, cy, vx, vy, dx, dy, d;
+	int cx, cy, vx, vy, dx, dy, d, tesz;
 
 	vx=(wrl->cam_org>> 8)&0xFFFF;
 	vy=(wrl->cam_org>>32)&0xFFFF;
+
+	tnode=BTM_FlattenWorldGlobalState(wrl);
+	if(tnode)
+	{
+		if(!tentbuf)
+			tentbuf=btm_malloc(65536);
+		tesz=BCCX_AbxeEncodeNodeBuffer(
+			tnode, tentbuf, 65536);
+//		BTM_RegionDoStoreBufferIx(wrl, rgn, 2,
+//			tentbuf, tesz);
+
+		BTM_StoreFile("region/global.dat", tentbuf, tesz);
+
+		BCCX_ClearZoneLevel(BCCX_ZTY_REDUCE);
+	}
 
 	rulst=NULL;
 	rklst=NULL;
