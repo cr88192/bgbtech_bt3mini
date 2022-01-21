@@ -443,6 +443,26 @@ u64 BTM_BlockOffsetRcix(u64 rcix, int dx, int dy, int dz)
 	return(rcix1);
 }
 
+u64 BTM_ConvCorgToBlkPos(u64 cpos)
+{
+	u64 bpos;
+	int cx, cy, cz;
+
+	cx=(cpos>> 8)&65535;
+	cy=(cpos>>32)&65535;
+	cz=(cpos>>56)&255;
+
+	bpos=(((u64)cz)<<32)|(((u64)cy)<<16)|(((u64)cx)<<0);
+	return(bpos);
+}
+
+int BTM_HashForBlkPos(u64 bpos)
+{
+	int h;
+	h=((bpos*(65521ULL*65521ULL*65521ULL))>>48)&255;
+	return(h);
+}
+
 int btm_stat_szallocsq[24];
 
 void *BTM_WorldAllocSq(BTM_World *wrl, int pidx)

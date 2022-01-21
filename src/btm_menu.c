@@ -35,6 +35,8 @@ int			btm_texfont_16px;
 
 int			btm_texfont_curi;
 
+int			btm_menu_inhibit;
+
 int BTM_MenuInit()
 {
 	byte *buf;
@@ -187,17 +189,41 @@ int BTM_LoadMenu(char *fname)
 {
 	BTM_Menu *menu;
 	BCCX_Node *root, *n1;
-	char *buf;
+	BCCX_Node *c;
+	char *buf, *s1;
 	int sz, sz1;
+	int na, ci;
 	
 	BTM_MenuInit();
 
-	buf=BTM_LoadFile(fname, &sz);
+//	buf=BTM_LoadFile(fname, &sz);
+	buf=BTM_LoadFileTmp(fname, &sz);
 	if(!buf)
 		return(-1);
 	
 	root=BCCX_ParseExprStr(buf);
 	BCCX_MarkTreeZone(root, BCCX_ZTY_GLOBAL);
+
+	if(BCCX_TagIsP(root, "loadfiles"))
+	{
+		na=BCCX_GetNodeChildCount(root);
+		for(ci=0; ci<na; ci++)
+		{
+			c=BCCX_GetNodeIndex(root, ci);
+//			BTM_InstanceStructureNodeAt(wrl, bcx, bcy, bcz, c);
+
+			if(BCCX_TagIsP(c, "loadmenu"))
+			{
+				s1=BCCX_Get(c, "path");
+				if(s1)
+				{
+					BTM_LoadMenu(s1);
+				}
+			}
+
+		}
+		return(0);
+	}
 	
 	menu=malloc(sizeof(BTM_Menu));
 	memset(menu, 0, sizeof(BTM_Menu));
@@ -225,7 +251,7 @@ int BTM_ShowMenu(char *name, char *subname)
 	
 	BTM_MenuInit();
 
-	if(!name)
+	if(!name || !(*name))
 	{
 		btm_showmenu=NULL;
 		return(0);
@@ -246,6 +272,7 @@ int BTM_ShowMenu(char *name, char *subname)
 	}
 
 	btm_showmenu=mcur;
+	btm_menu_inhibit=4;
 	
 	if(subname)
 	{
@@ -330,6 +357,8 @@ int BTM_DrawMenu()
 		return(0);
 
 	mcur=btm_showmenu->cur_node;
+	if(btm_menu_inhibit>0)
+		btm_menu_inhibit--;
 
 	if(BCCX_TagIsP(mcur, "menu"))
 	{
@@ -393,7 +422,9 @@ int BTM_DrawMenu()
 						}
 					}
 
-					if(I_KeyDown(K_ENTER) && !I_KeyDownL(K_ENTER))
+					if(I_KeyDown(K_ENTER) &&
+						!I_KeyDownL(K_ENTER) &&
+						!btm_menu_inhibit)
 					{
 //						if(scvn && scvv)
 						if(scvn)
@@ -553,7 +584,9 @@ int BTM_DrawMenu()
 					BTM_DrawString8px(-(l+4)*4, 72-i*8,
 						"*", 0xFFFFFFFFU);
 
-					if(I_KeyDown(K_ENTER) && !I_KeyDownL(K_ENTER))
+					if(I_KeyDown(K_ENTER) &&
+						!I_KeyDownL(K_ENTER) &&
+						!btm_menu_inhibit)
 					{
 						s1=BCCX_Get(c, "goname");
 						s2=BCCX_Get(c, "gosubname");

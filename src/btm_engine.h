@@ -259,6 +259,9 @@ u64		scr_hpred;				//hit prediction
 u64		scr_lhit;				//last hit
 u64		scr_lahit;				//last air before hit
 
+u64		scr_laspos;				//last air start position
+u64		scr_laepos;				//last air end position
+
 int		frame;
 u32		sel_blk;
 byte	sel_bt;
@@ -327,10 +330,15 @@ byte		dirty;
 
 BCCX_Node		*static_ent_tree;
 BTM_MobEntity	*live_entity;
+
+BTM_MobEntity	*live_entity_hash[256];		//hash for block position
 };
 
 struct BTM_MobEntity_s {
 BTM_MobEntity	*next;
+BTM_MobEntity	*chain;
+BTM_MobEntity	*nxt_bpos;
+BTM_MobEntity	*chn_bpos;
 int				org_x;		//16.8
 int				org_y;		//16.8
 int				org_z;		//8.8
@@ -355,6 +363,9 @@ s16				ivel_z;
 byte			rad_x;
 byte			rad_z;
 byte			rad_ofs_z;
+
+u64				spos;
+u64				bpos;
 
 float			spr_dxs;	//sprite width
 float			spr_dzs;	//sprite height

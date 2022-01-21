@@ -26,4 +26,32 @@
 		<option text="Option 2"/>
 	</convo>
 
+	<convo name="use_pig">
+		<text>
+			Oink!
+		</text>
+		<option text="Leave" goname=""/>
+	</convo>
+
+	<convo name="use_cow">
+		<text>
+			Moo!
+		</text>
+		<option text="Leave" goname=""/>
+	</convo>
+
+	<convo name="use_chicken">
+		<text>
+			Cluck!
+		</text>
+		<option text="Leave" goname=""/>
+	</convo>
+
+	<convo name="use_sheep">
+		<text>
+			Baaaa!
+		</text>
+		<option text="Leave" goname=""/>
+	</convo>
+
 </dialog>

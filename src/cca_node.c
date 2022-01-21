@@ -133,22 +133,45 @@ void *bccx_ralloc(int sz)
 	
 	if(!ralloc_buf)
 	{
-		ralloc_buf=malloc(65536+256);
+//		ralloc_buf=malloc(65536+256);
+		ralloc_buf=malloc(65536+1024);
 		ralloc_rov=0;
 	}
+	
+	sz=(sz+7)&(~7);
 	
 	ptr=ralloc_buf+ralloc_rov;
 	ralloc_rov=ralloc_rov+sz;
 	return(ptr);
 }
 
+char *bccx_rstrdup(char *str)
+{
+	char *b;
+	b=bccx_ralloc(strlen(str)+1);
+	strcpy(b, str);
+	return(b);
+}
+
+void *bccx_rmemdup(void *ptr, int sz)
+{
+	char *b;
+	b=bccx_ralloc(sz);
+	memcpy(b, ptr, sz);
+	return(b);
+}
+
 char **bccx_split(char *s)
 {
+	char *ta[64];
+	char tb[256];
 	char **a, *t;
 	int i;
 
-	a=bccx_ralloc(64*sizeof(char *));
-	memset(a, 0, 64*sizeof(char *));
+//	a=bccx_ralloc(64*sizeof(char *));
+//	memset(a, 0, 64*sizeof(char *));
+	memset(ta, 0, 64*sizeof(char *));
+	tb[0]=0;
 	i=0;
 	while(*s)
 	{
@@ -159,8 +182,9 @@ char **bccx_split(char *s)
 		if((s[0]=='/') && (s[1]=='/'))
 			break;
 
-		t=bccx_ralloc(256);
-		a[i++]=t;
+//		t=bccx_ralloc(256);
+		t=tb;
+//		a[i++]=t;
 
 		if(*s=='"')
 		{
@@ -169,15 +193,23 @@ char **bccx_split(char *s)
 			if(*s=='"')s++;
 
 			*t++=0;
+			ta[i++]=bccx_rstrdup(tb);
 			continue;
 		}
 
 		while(*s && (*s>' '))*t++=*s++;
 		*t++=0;
+		ta[i++]=bccx_rstrdup(tb);
 	}
-	a[i]=NULL;
 
-	return(a);
+//	if(tb[0])
+//		a[i++]=bccx_rstrdup(tb);
+
+//	a[i]=NULL;
+	ta[i]=NULL;
+
+//	return(a);
+	return(bccx_rmemdup(ta, (i+1)*sizeof(char *)));
 }
 
 s64 bccx_atoll(char *str)
@@ -954,6 +986,20 @@ void BCCX_SetFloatCst(BCCX_Node *n,
 	i=BCCX_FetchAttrValCst(n, rcst, var, &an, &av);
 	*an=(*an&4095)|(BCCX_IVTY_REAL<<12);
 	av->f=val;
+}
+
+void BCCX_SetInt(BCCX_Node *n, char *var, s64 val)
+{
+	bccx_cxstate iv;
+	iv=0;
+	BCCX_SetIntCst(n, &iv, var, val);
+}
+
+void BCCX_SetFloat(BCCX_Node *n, char *var, double val)
+{
+	bccx_cxstate iv;
+	iv=0;
+	BCCX_SetFloatCst(n, &iv, var, val);
 }
 
 void BCCX_SetIntCstIx(BCCX_Node *n,
@@ -1989,8 +2035,14 @@ void BCCX_ClearZoneLevel(int zone)
 	int ztag, zrgn;
 	void *ptr;
 
+	if(zone<=BCCX_ZTY_GLOBAL)
+		{ debug_break }
+
 	ztag=zone&255;
 	zrgn=(zone>>8)&65535;
+
+	if(ztag<=BCCX_ZTY_GLOBAL)
+		{ debug_break }
 
 	ptr=bccx_chunk_node;
 	while(ptr)
@@ -2021,8 +2073,8 @@ void BCCX_ClearZoneLevel(int zone)
 		while(tnl<tnle)
 		{
 //			if(tnl->ztag>=zone)
-			if((tn->ztag>ztag) ||
-				((tn->ztag==ztag) && (tn->zrgn==zrgn)))
+			if((tnl->ztag>ztag) ||
+				((tnl->ztag==ztag) && (tnl->zrgn==zrgn)))
 			{
 				memset(tnl, 0, sizeof(BCCX_NodeList));
 				*(void **)tnl=bccx_free_nodelist;

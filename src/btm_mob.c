@@ -195,7 +195,7 @@ int BTMGL_LoadTextureForName(char *name)
 			return(btmgl_tex_txn[i]);
 	}
 	
-	tbuf=BTM_LoadFile(name, &sz);
+	tbuf=BTM_LoadFileTmp(name, &sz);
 	if(tbuf)
 	{
 		tex=btmgl_tex_rov++;
@@ -424,6 +424,22 @@ u64 BTM_MobGetImpulsePos(BTM_World *wrl, BTM_MobEntity *self)
 		((cx&0x00FFFFFFULL)    ) |
 		((cy&0x00FFFFFFULL)<<24) |
 		((cz&0x0000FFFFULL)<<48) ;
+	return(cpos);
+}
+
+u64 BTM_MobGetOriginBlockPos(BTM_World *wrl, BTM_MobEntity *self)
+{
+	u64 cpos;
+	int cx, cy, cz;
+
+	cx=self->org_x>>8;
+	cy=self->org_y>>8;
+	cz=self->org_z>>8;
+
+	cpos=
+		((cx&0x0000FFFFULL)    ) |
+		((cy&0x0000FFFFULL)<<16) |
+		((cz&0x000000FFULL)<<32) ;
 	return(cpos);
 }
 
@@ -890,5 +906,273 @@ int BTMGL_DrawWorldEntities(BTM_World *wrl)
 		rgn=rgn->next;
 	}
 
+	return(0);
+}
+
+int BTM_CalcRayXyzDistApprox(int dx, int dy, int dz)
+{
+	int adx, ady, adz, ad;
+	int ada, adb, adc;
+
+	adx=dx^(dx>>31);
+	ady=dy^(dy>>31);
+	adz=dz^(dz>>31);
+	ad=adx+ady+adz;
+	
+	if(adx>ady)
+	{
+		if(adx>adz)
+		{
+			ada=adx;
+			if(ady>adz)		{ adb=ady; adc=adz; }
+			else			{ adb=adz; adc=ady; }
+		}else				{ ada=adz; adb=adx; adc=ady; }
+	}else
+	{
+		if(ady>adz)
+		{
+			ada=ady;
+			if(adx>adz)		{ adb=adx; adc=adz; }
+			else			{ adb=adz; adc=adx; }
+		}else				{ ada=adz; adb=ady; adc=adx; }
+	}
+	
+	ad=ada+(adb>>1)+(adc>>2);
+	
+	return(ad);
+}
+
+int BTM_CalcRayDistApprox(u64 spos, u64 epos)
+{
+	u64 step;
+	int sx, sy, sz, ex, ey, ez, dx, dy, dz, d;
+	
+	sx=(spos>> 0)&0x00FFFFFFU;
+	sy=(spos>>24)&0x00FFFFFFU;
+	sz=(spos>>48)&0x0000FFFFU;
+	
+	ex=(epos>> 0)&0x00FFFFFFU;
+	ey=(epos>>24)&0x00FFFFFFU;
+	ez=(epos>>48)&0x0000FFFFU;
+	
+	sx=((s32)(sx<<8))>>8;
+	sy=((s32)(sy<<8))>>8;
+	
+	ex=((s32)(ex<<8))>>8;
+	ey=((s32)(ey<<8))>>8;
+	
+	dx=ex-sx;
+	dy=ey-sy;
+	dz=ez-sz;
+	
+	if(dx>( 0x800000))
+		dx-=0x1000000;
+	if(dx<(-0x800000))
+		dx+=0x1000000;
+
+	if(dy>( 0x800000))
+		dy-=0x1000000;
+	if(dy<(-0x800000))
+		dy+=0x1000000;
+		
+	
+	d=BTM_CalcRayXyzDistApprox(dx, dy, dz);
+	return(d);
+}
+
+u64 BTM_CalcRayStepVector(u64 spos, u64 epos)
+{
+	u64 step;
+	int sx, sy, sz, ex, ey, ez, dx, dy, dz, d;
+	
+	sx=(spos>> 0)&0x00FFFFFFU;
+	sy=(spos>>24)&0x00FFFFFFU;
+	sz=(spos>>48)&0x0000FFFFU;
+	
+	ex=(epos>> 0)&0x00FFFFFFU;
+	ey=(epos>>24)&0x00FFFFFFU;
+	ez=(epos>>48)&0x0000FFFFU;
+	
+	sx=((s32)(sx<<8))>>8;
+	sy=((s32)(sy<<8))>>8;
+	
+	ex=((s32)(ex<<8))>>8;
+	ey=((s32)(ey<<8))>>8;
+	
+	dx=ex-sx;
+	dy=ey-sy;
+	dz=ez-sz;
+	
+	if(dx>( 0x800000))
+		dx-=0x1000000;
+	if(dx<(-0x800000))
+		dx+=0x1000000;
+
+	if(dy>( 0x800000))
+		dy-=0x1000000;
+	if(dy<(-0x800000))
+		dy+=0x1000000;
+		
+	
+	d=BTM_CalcRayXyzDistApprox(dx, dy, dz);
+	while(d>256)
+	{
+		dx=dx>>1;
+		dy=dy>>1;
+		dz=dz>>1;
+		d=BTM_CalcRayXyzDistApprox(dx, dy, dz);
+	}
+	
+	step=
+		((dx&0x00FFFFFFULL)<< 0) |
+		((dy&0x00FFFFFFULL)<<24) |
+		((dz&0x0000FFFFULL)<<48) ;
+	return(step);
+}
+
+BTM_MobEntity *BTM_QueryWorldEntitiesAtPos(
+	BTM_World *wrl, BTM_MobEntity *slst, u64 spos)
+{
+	u64 abpos[8];
+	BTM_Region *rgn;
+	BTM_MobEntity *mob, *mlst;
+	u64 blk, clpos, rcix, rcix2, rlcix, bpos;
+	int rix, cix;
+	int cx, cy, cz, sx, sy, sz, h;
+	int i;
+	
+	mlst=slst;
+
+	rcix=BTM_WorldCorgToRcix(spos);
+	rix=BTM_Rcix2Rix(rcix);
+	cix=BTM_Rcix2Cix(rcix);
+
+	rgn=BTM_GetRegionForRix(wrl, rix);
+//	BTM_GenerateBaseRegion(wrl, rgn);
+//	rgix=rix;
+
+//	bpos=BTM_ConvCorgToBlkPos(spos);
+
+	sx=(spos>> 8)&65535;
+	sy=(spos>>32)&65535;
+	sz=(spos>>56)&255;
+
+//	bpos=BTM_ConvRcixToBlkPos(rcix);
+	abpos[0]=(((u64)(sz+0))<<32)|(((u64)(sy+0))<<16)|(((u64)(sx+0))<<0);
+	abpos[1]=(((u64)(sz-1))<<32)|(((u64)(sy+0))<<16)|(((u64)(sx+0))<<0);
+	abpos[2]=(((u64)(sz+1))<<32)|(((u64)(sy+0))<<16)|(((u64)(sx+0))<<0);
+	abpos[3]=(((u64)(sz+0))<<32)|(((u64)(sy-1))<<16)|(((u64)(sx+0))<<0);
+	abpos[4]=(((u64)(sz+0))<<32)|(((u64)(sy+1))<<16)|(((u64)(sx+0))<<0);
+	abpos[5]=(((u64)(sz+0))<<32)|(((u64)(sy+0))<<16)|(((u64)(sx-1))<<0);
+	abpos[6]=(((u64)(sz+0))<<32)|(((u64)(sy+0))<<16)|(((u64)(sx+1))<<0);
+
+	for(i=0; i<7; i++)
+	{
+		bpos=abpos[i];
+		h=BTM_HashForBlkPos(bpos);
+		mob=rgn->live_entity_hash[h];
+		while(mob)
+		{
+			if(mob->bpos==bpos)
+			{
+				if(!mob->chn_bpos)
+				{
+					mob->chn_bpos=mlst;
+					mlst=mob;
+				}
+			}
+			mob=mob->nxt_bpos;
+		}
+	}
+
+	return(mlst);
+}
+
+BTM_MobEntity *BTM_QueryWorldEntitiesForRay(
+	BTM_World *wrl, u64 spos, u64 epos)
+{
+	BTM_Region *rgn;
+	BTM_MobEntity *mob, *mlst;
+	u64 cpos, step;
+	int dist, n;
+
+	if(!spos || !epos)
+		return(NULL);
+
+	step=BTM_CalcRayStepVector(spos, epos);
+	dist=BTM_CalcRayDistApprox(spos, epos);
+	
+	mlst=NULL;
+	cpos=spos; n=((dist+255)>>8)+2;
+	while((n--)>0)
+	{
+		mlst=BTM_QueryWorldEntitiesAtPos(wrl, mlst, cpos);
+		cpos+=step;
+	}
+	return(mlst);
+}
+
+int BTM_QueryUnlinkMobChains(
+	BTM_World *wrl, BTM_MobEntity *smob)
+{
+	BTM_MobEntity *cmob, *nmob;
+	
+	cmob=smob;
+	while(cmob)
+	{
+		nmob=cmob->chain;
+		cmob->chain=NULL;
+		cmob=nmob;
+	}
+
+	cmob=smob;
+	while(cmob)
+	{
+		nmob=cmob->chn_bpos;
+		cmob->chn_bpos=NULL;
+		cmob=nmob;
+	}
+	return(0);
+}
+
+BTM_MobEntity *BTM_QueryWorldEntityForRay(
+	BTM_World *wrl, u64 spos, u64 epos)
+{
+	BTM_Region *rgn;
+	BTM_MobEntity *mob, *mlst;
+	u64 cpos, step;
+	int dist, n;
+
+	if(!spos || !epos)
+		return(NULL);
+
+	step=BTM_CalcRayStepVector(spos, epos);
+	dist=BTM_CalcRayDistApprox(spos, epos);
+	
+	mlst=NULL;
+	cpos=spos; n=((dist+255)>>8)+2;
+	while((n--)>0)
+	{
+		mlst=BTM_QueryWorldEntitiesAtPos(wrl, mlst, cpos);
+		if(mlst)
+			break;
+		cpos+=step;
+	}
+	
+	BTM_QueryUnlinkMobChains(wrl, mlst);
+	return(mlst);
+}
+
+int BTM_EventPlayerUseMob(
+	BTM_World *wrl, BTM_MobEntity *mob)
+{
+	if(!strcmp(mob->cname, "pig"))
+		BTM_ShowMenu("main", "use_pig");
+	if(!strcmp(mob->cname, "cow"))
+		BTM_ShowMenu("main", "use_cow");
+	if(!strcmp(mob->cname, "chicken"))
+		BTM_ShowMenu("main", "use_chicken");
+	if(!strcmp(mob->cname, "sheep"))
+		BTM_ShowMenu("main", "use_sheep");
 	return(0);
 }

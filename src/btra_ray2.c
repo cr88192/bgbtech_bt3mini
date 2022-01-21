@@ -268,6 +268,11 @@ int BTM_RaycastLineSingle(BTM_World *wrl, int max,
 	if(!(flag&4))
 	{
 		rgn->dirty|=2;	/* Player has been here. */
+		
+		if(flag&1)
+		{
+			wrl->scr_laspos=spos;
+		}
 	}
 	
 	voxbm=rgn->voxbm;
@@ -341,6 +346,9 @@ int BTM_RaycastLineSingle(BTM_World *wrl, int max,
 		{
 			wrl->scr_lhit=0;
 			wrl->scr_lahit=0;
+//			wrl->scr_laepos=0;
+			if(flag&1)
+				wrl->scr_laepos=clpos;
 			return(0);
 		}
 
@@ -438,6 +446,9 @@ int BTM_RaycastLineSingle(BTM_World *wrl, int max,
 	{
 		wrl->scr_lhit=0;
 		wrl->scr_lahit=0;
+//		wrl->scr_laepos=0;
+		if(flag&1)
+			wrl->scr_laepos=clpos;
 		return(0);
 	}
 	
@@ -464,7 +475,12 @@ int BTM_RaycastLineSingle(BTM_World *wrl, int max,
 	
 	wrl->scr_lhit=rcix;
 	wrl->scr_lahit=rcix2;
-	
+
+	if(flag&1)
+	{
+		wrl->scr_laepos=clpos;
+	}
+
 	i=BTM_RaycastTryAddHitCix(wrl, rcix);
 	return(i);
 }

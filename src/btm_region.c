@@ -104,6 +104,50 @@ int BTM_FreeMul256B(void *ptr, int n)
 	return(0);
 }
 
+byte *btm_loadtemp_buf[32];
+int btm_loadtemp_sz[32];
+int btm_loadtemp_rov;
+
+byte *BTM_AllocTempBuffer(int sz)
+{
+	int ix, sz1;
+
+//	if(sz<=1024)
+//	{
+//		return(bccx_ralloc(sz));
+//	}
+	
+	ix=btm_loadtemp_rov;
+	btm_loadtemp_rov=(ix+1)&15;
+	
+	if(sz>=262144)
+		{ ix=0; }
+	else if(sz>=65536)
+		{ ix=2|(ix&1); }
+	else if(sz>=16384)
+		{ ix=4|(ix&3); }
+	else if(sz>=4096)
+		{ ix=8|(ix&7); }
+	else
+		{ ix=16|(ix&15); }
+
+	sz1=(sz+255)>>8;
+	
+	if(btm_loadtemp_buf[ix] && (sz1>btm_loadtemp_sz[ix]))
+	{
+		BTM_FreeMul256B(btm_loadtemp_buf[ix], btm_loadtemp_sz[ix]);
+		btm_loadtemp_buf[ix]=NULL;
+	}
+	
+	if(!btm_loadtemp_buf[ix])
+	{
+		btm_loadtemp_buf[ix]=BTM_AllocMul256B(sz1);
+		btm_loadtemp_sz[ix]=sz1;
+	}
+	
+	return(btm_loadtemp_buf[ix]);
+}
+
 byte *BTM_LoadFileI(char *name, int *rsz, int pad)
 {
 	char tb[256];
@@ -127,7 +171,9 @@ byte *BTM_LoadFileI(char *name, int *rsz, int pad)
 	fseek(fd, 0, 2);
 	sz=ftell(fd);
 	fseek(fd, 0, 0);
-	if(pad&2)
+	if(pad&4)
+		{ buf=BTM_AllocTempBuffer(sz+24); }
+	else if(pad&2)
 		{ buf=BTM_AllocMul64K((sz+65535)>>16); }
 	else if(pad&1)
 		{ buf=btm_malloc(sz+24); }
@@ -169,6 +215,11 @@ byte *BTM_LoadFile(char *name, int *rsz)
 byte *BTM_LoadFileNp(char *name, int *rsz)
 {
 	return(BTM_LoadFileI(name, rsz, 2));
+}
+
+byte *BTM_LoadFileTmp(char *name, int *rsz)
+{
+	return(BTM_LoadFileI(name, rsz, 5));
 }
 
 int BTM_StoreFile(char *name, void *buf, int sz)

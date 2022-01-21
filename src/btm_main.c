@@ -674,11 +674,49 @@ int BTM_ConCmd_Time(BTM_ConCmd *cmd, char **args)
 	return(0);
 }
 
+int BTM_ConCmd_Instance(BTM_ConCmd *cmd, char **args)
+{
+	char tb[64];
+	char *sn1, *sn2, *s, *t;
+
+	int cx, cy, cz;
+	if(args[1])
+	{
+		s=args[1]; t=tb;
+		while(*s && *s!='.')
+			*t++=*s++;
+		*t++=0;
+		
+		sn1=bccx_strdup(tb);
+		sn2=NULL;
+		
+		if(*s=='.')
+		{
+			s++;
+			t=tb;
+			while(*s && *s!='.')
+				*t++=*s++;
+			*t++=0;
+			sn2=bccx_strdup(tb);
+		}
+	
+		cx=floor(cam_org[0]);
+		cy=floor(cam_org[1]);
+		cz=floor(cam_org[2])-2;
+	
+//		BTM_SetupLocalSeedXY(btm_wrl, cx, cy);
+		BTM_InstanceStructureAt(btm_wrl,
+			cx, cy, cz, sn1, sn2);
+	}
+	return(0);
+}
+
 int main(int argc, char *argv[])
 {
 	char tb[256];
 	TKRA_Context *ractx;
 	BTM_World *wrl;
+	BTM_MobEntity *mob;
 //	BTM_Screen *scr;
 //	BTM_TexImg *tex;
 //	BTM_TexImg *skytex;
@@ -702,6 +740,7 @@ int main(int argc, char *argv[])
 //	BTM_ConAddCommand("noclip", BTM_ConCmd_Noclip);
 	BTM_ConAddCmdVar("noclip", BTM_ConCmd_Noclip, &btm_noclip, 0x3F);
 	BTM_ConAddCommand("time", BTM_ConCmd_Time);
+	BTM_ConAddCommand("instance", BTM_ConCmd_Instance);
 
 	printf("Init Skybox\n");
 
@@ -730,14 +769,14 @@ int main(int argc, char *argv[])
 		TKRA_RGBA, TKRA_GL_UNSIGNED_SHORT_5_5_5_1, tex0);
 #endif
 
-//	tbuf=BTM_LoadFile("gfx/dummy.dds", &j);
+//	tbuf=BTM_LoadFileTmp("gfx/dummy.dds", &j);
 
 	btmgl_filter_min=GL_NEAREST_MIPMAP_NEAREST;
 	btmgl_filter_max=GL_NEAREST;
 
 #if 1
 	skybox_tex_stars=1;
-	tbuf=BTM_LoadFile("gfx/sky2.dds", &j);
+	tbuf=BTM_LoadFileTmp("gfx/sky2.dds", &j);
 	if(tbuf)
 	{
 		tkra_glBindTexture(TKRA_TEXTURE_2D, skybox_tex_stars);
@@ -760,8 +799,8 @@ int main(int argc, char *argv[])
 		TKRA_RGBA, TKRA_GL_UNSIGNED_SHORT_5_5_5_1, tex0);
 #endif
 
-//	tbuf=BTM_LoadFile("gfx/atlas0_2a.dds", &j);
-	tbuf=BTM_LoadFile("gfx/atlas0_2b.dds", &j);
+//	tbuf=BTM_LoadFileTmp("gfx/atlas0_2a.dds", &j);
+	tbuf=BTM_LoadFileTmp("gfx/atlas0_2b.dds", &j);
 	if(tbuf)
 	{
 		tkra_glBindTexture(TKRA_TEXTURE_2D, 2);
@@ -859,7 +898,8 @@ int main(int argc, char *argv[])
 	tkra_glClearColor(0.3, 0.6, 0.9, 1.0);
 	wrl->daytimer=360;
 
-	BTM_LoadMenu("dialog/mainmenu0.xml");
+//	BTM_LoadMenu("dialog/mainmenu0.xml");
+	BTM_LoadMenu("dialog/menus.xml");
 	
 	BTM_ConPrintString("Console String\n");
 
@@ -935,7 +975,7 @@ int main(int argc, char *argv[])
 
 			if(I_KeyDown(K_INS) && !I_KeyDownL(K_INS))
 			{
-				if(wrl->scr_lahit)
+				if(wrl->scr_lahit && (wrl->sel_bt>=4))
 				{
 					tblk=wrl->sel_bt;
 					
@@ -962,7 +1002,7 @@ int main(int argc, char *argv[])
 	//		if(I_KeyDown('=') && !I_KeyDownL('='))
 			if(I_KeyDown(K_DEL) && !I_KeyDownL(K_DEL))
 			{
-				if(wrl->scr_lhit && wrl->sel_bt)
+				if(wrl->scr_lhit && (wrl->sel_bt>=4))
 				{
 					BTM_SetWorldBlockCix(wrl, wrl->scr_lhit, wrl->sel_bt);
 					BTM_UpdateWorldBlockOccCix2(wrl, wrl->scr_lhit);
@@ -976,6 +1016,16 @@ int main(int argc, char *argv[])
 				{
 					BTM_SetWorldBlockCix(wrl, wrl->scr_lhit, BTM_BLKTY_AIR2);
 					BTM_UpdateWorldBlockOccCix2(wrl, wrl->scr_lhit);
+				}
+			}
+
+			if(I_KeyDown(K_ENTER) && !I_KeyDownL(K_ENTER))
+			{
+				mob=BTM_QueryWorldEntityForRay(wrl,
+					wrl->scr_laspos, wrl->scr_laepos);
+				if(mob)
+				{
+					BTM_EventPlayerUseMob(wrl, mob);
 				}
 			}
 

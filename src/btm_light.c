@@ -15,6 +15,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 
+u64 BTM_MobGetOriginPos(BTM_World *wrl, BTM_MobEntity *self);
+
 int BTM_UpdateGetBlockLightEbl(BTM_World *wrl, u32 blk)
 {
 	int j;
@@ -642,11 +644,11 @@ int BTM_BlockTickRegion(BTM_World *wrl, BTM_Region *rgn)
 	BTM_MobEntity *ent, *ent1, *elst, *enxt;
 	int npmobs;
 
-	u64 rcix, cpos;
+	u64 rcix, cpos, bpos;
 	u32 blk;
 	int cix, cnt;
 	int ecx, ecy, erx, ery, erix;
-	int i, j, k, l;
+	int i, j, k, l, h;
 //	int cx, cy, cz;
 
 	npmobs=BTM_CountRegionEntityClass(wrl, rgn, 1);
@@ -728,6 +730,28 @@ int BTM_BlockTickRegion(BTM_World *wrl, BTM_Region *rgn)
 	}
 	rgn->live_entity=elst;
 	
+	for(i=0; i<256; i++)
+		rgn->live_entity_hash[i]=NULL;
+	
+	ent=rgn->live_entity;
+	while(ent)
+	{
+		cpos=BTM_MobGetOriginPos(wrl, ent);
+//		bpos=BTM_MobGetOriginBlockPos(ent);
+		bpos=BTM_ConvCorgToBlkPos(cpos);
+		ent->spos=cpos;
+		ent->bpos=bpos;
+		
+//		h=((bpos*(65521ULL*65521ULL*65521ULL))>>48)&255;
+		h=BTM_HashForBlkPos(bpos);
+		ent->nxt_bpos=rgn->live_entity_hash[h];
+		rgn->live_entity_hash[h]=ent;
+		ent->chn_bpos=NULL;
+		
+		ent=ent->next;
+	}
+	
+
 	return(0);
 }
 

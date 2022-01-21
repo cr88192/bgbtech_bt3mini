@@ -506,7 +506,9 @@ byte *FS_LoadFile(char *name, int *rsz, int pad)
 		{
 			sz=FS_GetWad4LumpSize(wctx, i);
 
-			if(pad&2)
+			if(pad&4)
+				{ buf=BTM_AllocTempBuffer(sz+24); }
+			else if(pad&2)
 				{ buf=BTM_AllocMul64K((sz+65535)>>16); }
 			else if(pad&1)
 				{ buf=btm_malloc(sz+24); }

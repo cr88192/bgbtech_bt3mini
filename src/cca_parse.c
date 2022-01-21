@@ -113,12 +113,17 @@ int BCCX_ParseContSpecialP(char **strm)
 
 char *BCCX_ParseToken(char **strm, int *ty)
 {
+	char tb[256];
 	char buf[16];
-	char *t, *t2, *b;
+//	char *t, *t2, *b;
+	char *t, *t2;
 	int i, j;
 
-	b=bccx_ralloc(256); t=b;
-	*b=0;
+//	b=bccx_ralloc(256); t=b;
+//	*b=0;
+	
+	t=tb;
+	*t=0;
 
 	if(ty)*ty=0;
 
@@ -193,7 +198,8 @@ char *BCCX_ParseToken(char **strm, int *ty)
 		*t++=0;
 	}
 
-	return(b);
+//	return(b);
+	return(bccx_rstrdup(tb));
 }
 
 char *BCCX_PeekToken(char **strm, int *ty)
@@ -209,12 +215,15 @@ char *BCCX_PeekToken(char **strm, int *ty)
 
 char *BCCX_ParseText(char **strm)
 {
+	char tb[4096];
 	char *b, *t, *t1;
 	char buf[16];
 	int i, j, gws, rws;
 
-	b=bccx_ralloc(4096);
-	t=b; *t=0;
+//	b=bccx_ralloc(4096);
+//	t=b; *t=0;
+
+	t=tb; *t=0;
 
 	i=BCCX_ParseEatWhite(strm);
 	if(i<0)return(NULL);
@@ -301,13 +310,14 @@ char *BCCX_ParseText(char **strm)
 	t-=gws;
 	*t++=0;
 
-	return(b);
+//	return(b);
+	return(bccx_rstrdup(tb));
 }
 
 #if 1
 int BCCX_ParseAttr(char **strm, BCCX_Node *node)
 {
-	char *ns, *var, *eq, *val;
+	char *ns, *var, *eq, *val, *s1;
 	int ty;
 
 	while(1)
@@ -365,6 +375,21 @@ int BCCX_ParseAttr(char **strm, BCCX_Node *node)
 
 		if(ty!=BGBDY_TTY_STRING)
 		{
+			if(((val[0]>='0') && (val[0]<='9')) ||
+				((val[0]=='-') && (val[1]>='0') && (val[1]<='9')))
+			{
+				s1=val;
+				while(*s1 && (*s1!='.'))s1++;
+				if(!(*s1))
+				{
+					BCCX_SetInt(node, var, bccx_atoll(val));
+					continue;
+				}
+			
+				BCCX_SetFloat(node, var, bccx_atof(val));
+				continue;
+			}
+		
 			printf("parse error (inv attribute arg).\n");
 			*(int *)-1=-1;
 			return(-1);

@@ -169,7 +169,7 @@ int BTM_GenTree(BTM_World *wrl, int cx, int cy, int cz)
 {
 	int i, j, k, d, h;
 
-	h=3+(rand()&3);
+	h=3+(btm_tgrand(wrl)&3);
 
 	for(i=0; i<5; i++)
 		for(j=0; j<5; j++)
@@ -447,15 +447,52 @@ int BTM_GenerateBaseRegion(BTM_World *wrl, BTM_Region *rgn)
 int BTM_InstFill(BTM_World *wrl,
 	int mcx, int mcy, int mcz,
 	int ncx, int ncy, int ncz,
-	u32 blk)
+	u32 blk, u32 rpblk)
 {
+	u32 tblk;
 	int x, y, z;
 
 	for(z=mcz; z<=ncz; z++)
 		for(y=mcy; y<=ncy; y++)
 			for(x=mcx; x<=ncx; x++)
 	{
-		BTM_SetWorldBlockNlXYZ(wrl, +x, y, z, blk);
+		if(rpblk)
+		{
+			tblk=BTM_GetWorldBlockXYZ(wrl, x, y, z);
+			if((tblk&255)==(rpblk&255))
+				BTM_SetWorldBlockNlXYZ(wrl, x, y, z, blk);
+		}else
+		{
+			BTM_SetWorldBlockNlXYZ(wrl, x, y, z, blk);
+		}
+	}
+
+	return(0);
+}
+
+int BTM_InstRelight(BTM_World *wrl,
+	int mcx, int mcy, int mcz,
+	int ncx, int ncy, int ncz)
+{
+	u64 rcix;
+	int x, y, z;
+
+	for(z=mcz; z<=ncz; z++)
+		for(y=mcy; y<=ncy; y++)
+			for(x=mcx; x<=ncx; x++)
+	{
+		rcix=BTM_BlockCoordsToRcix(x, y, z);
+		BTM_UpdateWorldBlockOccCix2(wrl, rcix);
+	}
+
+	for(z=mcz; z<=ncz; z++)
+		for(y=mcy; y<=ncy; y++)
+			for(x=mcx; x<=ncx; x++)
+	{
+//		BTM_SetWorldBlockNlXYZ(wrl, +x, y, z, blk);
+		rcix=BTM_BlockCoordsToRcix(x, y, z);
+//		BTM_UpdateWorldBlockOccCix2(wrl, rcix);
+		BTM_UpdateBlockLightForRCix(wrl, rcix);
 	}
 
 	return(0);
@@ -467,9 +504,9 @@ int BTM_InstanceStructureNodeAt(BTM_World *wrl,
 	int bcx, int bcy, int bcz, BCCX_Node *node)
 {
 	BCCX_Node *c;
-	char *bty, *s0, *s1, *s2;
+	char *bty, *rpbty, *s0, *s1, *s2;
 	char *otop;
-	u32 blk;
+	u32 blk, rpblk;
 	int na, ci;
 	int mx, my, mz, nx, ny, nz;
 
@@ -495,7 +532,7 @@ int BTM_InstanceStructureNodeAt(BTM_World *wrl,
 		if(na<=0)
 			return(0);
 
-		ci=rand()%na;
+		ci=btm_tgrand(wrl)%na;
 		c=BCCX_GetNodeIndex(node, ci);
 		BTM_InstanceStructureNodeAt(wrl, bcx, bcy, bcz, c);
 		return(0);
@@ -510,15 +547,51 @@ int BTM_InstanceStructureNodeAt(BTM_World *wrl,
 		ny=BCCX_GetInt(node, "max_y");
 		nz=BCCX_GetInt(node, "max_z");
 
+		if((mx==nx) && (mx==0))
+			{ mx=BCCX_GetInt(node, "rel_x"); nx=mx; }
+		if((my==ny) && (my==0))
+			{ my=BCCX_GetInt(node, "rel_y"); ny=my; }
+		if((mz==nz) && (mz==0))
+			{ mz=BCCX_GetInt(node, "rel_z"); nz=mz; }
+
 		bty=BCCX_Get(node, "block");
 		blk=BTM_BlockForName(wrl, bty);
 		if(!blk)
 			return(0);
 		
+		rpblk=0;
+		
+		rpbty=BCCX_Get(node, "replace");
+		if(rpbty)
+			rpblk=BTM_BlockForName(wrl, rpbty);
+
 		BTM_InstFill(wrl,
 			bcx+mx, bcy+my, bcz+mz,
 			bcx+nx, bcy+ny, bcz+nz,
-			blk);
+			blk, rpblk);
+		return(0);
+	}
+
+	if(BCCX_TagIsP(node, "relight"))
+	{
+		mx=BCCX_GetInt(node, "min_x");
+		my=BCCX_GetInt(node, "min_y");
+		mz=BCCX_GetInt(node, "min_z");
+		nx=BCCX_GetInt(node, "max_x");
+		ny=BCCX_GetInt(node, "max_y");
+		nz=BCCX_GetInt(node, "max_z");
+
+		if((mx==nx) && (mx==0))
+			{ mx=BCCX_GetInt(node, "rel_x"); nx=mx; }
+		if((my==ny) && (my==0))
+			{ my=BCCX_GetInt(node, "rel_y"); ny=my; }
+		if((mz==nz) && (mz==0))
+			{ mz=BCCX_GetInt(node, "rel_z"); nz=mz; }
+
+		BTM_InstRelight(wrl,
+			bcx+mx, bcy+my, bcz+mz,
+			bcx+nx, bcy+ny, bcz+nz);
+
 		return(0);
 	}
 
@@ -529,6 +602,21 @@ int BTM_InstanceStructureNodeAt(BTM_World *wrl,
 		mz=BCCX_GetInt(node, "rel_z");
 
 		s1=BCCX_Get(node, "name");
+		
+		if(s1)
+		{
+			if(!strcmp(s1, "tree"))
+			{
+				BTM_GenTree(wrl, bcx+mx, bcy+my, bcz+mz);
+
+				BTM_InstRelight(wrl,
+					bcx+mx-5, bcy+my-5, bcz+mz,
+					bcx+mx+5, bcy+my+5, bcz+mz+10);
+
+				return(0);
+			}
+		}
+		
 		if(!s1)
 			s1=btm_curtopname;
 		
@@ -555,13 +643,34 @@ int BTM_InstanceStructureAt(BTM_World *wrl,
 {
 	BCCX_Node *c;
 	char *otop;
+	u64 oseed;
 
 	otop=btm_curtopname;
+	oseed=wrl->tg_curseed;
 	btm_curtopname=name;
-	
+
+	BTM_SetupLocalSeedXY(wrl, bcx, bcy);
+
+	if(name)
+	{
+		if(!strcmp(name, "tree"))
+		{
+			BTM_GenTree(wrl, bcx, bcy, bcz);
+
+			BTM_InstRelight(wrl,
+				bcx-5, bcy-5, bcz,
+				bcx+5, bcy+5, bcz+10);
+
+			btm_curtopname=otop;
+			wrl->tg_curseed=oseed;
+			return(0);
+		}
+	}
+
 	c=BTM_LookupMenuNode(name, subname);
 	BTM_InstanceStructureNodeAt(wrl, bcx, bcy, bcz, c);
 	
 	btm_curtopname=otop;
+	wrl->tg_curseed=oseed;
 	return(0);
 }
