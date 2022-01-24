@@ -1,0 +1,173 @@
+Some structures in BGBTech3 will make use of an XML variant.
+* Will not support namespaces.
+* Will support numeric literals as an extension.
+
+
+=== General Syntax ===
+
+Basic Node syntax:
+ <tag/>
+ <tag> ... </tag>
+ <tag attribs/>
+ <tag attribs> ... </tag>
+
+Attributes follow key'='value form.
+* keyname '=' value
+* Where value is a literal value.
+** May be a single or double quoted string.
+** May be an integer or floating point literal (unquoted).
+** Note that quoting a number will parse it as a string.
+* Unquoted '$name' will be reserved for contextual symbols.
+** These will reflect attributes whose value is to be pulled from a variable.
+** This will happen at the time of evaluation, not during parse.
+
+Whitespace:
+* Whitespace between nodes is ignored.
+* Any initial and final whitespace in a text blob will be ignored.
+* Any whitespace following a newline within a text blob will be ignored.
+* CR+LF will be normalized as LF only.
+
+As a result:
+ <text>
+     Line 1
+     Line 2
+     Line 3
+ </text>
+Will be parsed as "Line 1\nLine2\nLine3".
+
+
+=== Variables and Scope ===
+
+Within some contexts (menus and terrain generation) variables may be defined.
+
+These will have one of several types (similar to XML attributes):
+* String: Textual / String value.
+* Real: Floating point value, double precision.
+* Int: Integer value, 64-bit range.
+
+The presence of any top-level variables will depend on the context in which the dialog or terrain feature is triggered, as well as some global variables which may exist.
+
+When a dialog is triggered by a mob, variables specific to the mob may be bound. These are local to the scope of the dialog.
+
+
+Additionally, nodes or structures may bind additional variables.
+* Any newly bound variables will follow dynamic scope rules.
+* They will disappear once the dialog or instance structure completes.
+
+Variables will have one of several update modes:
+* Bind: Update a variable within the current scope.
+** Updates the variable locally (replaces prior value).
+** Does not effect variables outside the current scope.
+* Set: Updates the variable within a parent scope (if it exists).
+** Binds the variable locally if it does not already exist.
+** May be used to modify the value of a global variable.
+
+It may also be possible to bind values within the global scope.
+* These variables will be tied to the current world state.
+* The contents of global (non-cvar) variables will be saved with the world.
+
+
+=== Menus and Dialogs ===
+
+These begin with a top level 'dialog' tag.
+* name: Gives the name of this dialog.
+* root: Gives the default subname to use when this dialog is triggered.
+
+The 'dialog' tag may contain several subtags:
+* 'menu': A menu of options, with an optional title.
+* 'convo': A conversation box.
+
+Menu:
+* 'menu': A menu of options, with an optional title.
+* name: name (subname) of this menu.
+* title: Gives a title shown at the top of the menu.
+* Contains a list of options.
+
+Option:
+* 'option': Gives a user-selectable menu option.
+* text: Text to be shown for this option.
+* goname (optional): Go to this dialog if used.
+** If goname is an empty string, this exits the menu or dialog.
+* gosubname (optional): Go to this sub-name if used.
+* cvar (optional): This option may be used to update a given cvar.
+** The base-type and UI-type of the cvar determines its presentation.
+
+Convo:
+* 'convo': Conversation Box
+* Contains a 'text' tag and options.
+** The text tag shows what is to be said in this conversation box.
+** May also be given by a text attribute.
+* face: Gives the name of the character face/voice to use.
+* Gives one or more menu options.
+** There will be at least one option (such as to proceed or exit the dialog).
+* face_idx: Gives the starting index of the face/mood in the sprite sheet.
+
+Face:
+* 'face': Give a character face and voice.
+* image: Gives the image / sprite-sheet for the current face.
+* voice: Gives the sound effect for the character voice.
+* The sprite sheet will be 4x4, using a pair of entries for speaking.
+** Additional sheet entries may be used for longer animations or "moods".
+** Entries will be organized in raster order from the top-left corner.
+* Potentially, additional image layers may be used for recolor or features.
+
+Within certain text fields, variables may be expanded out.
+* $varname: Pull the field value from a variable name.
+** This may map to either a numeric literal or string.
+* Variables will be initially bound based on the mob which triggers the dialog.
+
+
+=== Structures ===
+
+These will begin with a top-level 'structure' tag, with the same general conventions as a menu or dialog.
+* 'name' will refer to the toplevel name of the structure.
+** Using name without subname will refer to the 'root' object.
+* 'subname' will refer to the objects within the structure.
+** Using subname without a name will imply an object within the same structure.
+
+A structure may contain a collection of 'object' tags, which will represent a given 'object' that may be instantiated within a structure.
+* The object tag in turn contains a list of commands, executed in-order.
+* Command coordinates will be relative to where the object is instantiated.
+* Variables using during instantiation will be dynamically scoped.
+
+Fill command:
+* 'fill': Fill a region of blocks with a new block.
+* min_x / min_y / min_z / max_x / max_y / max_z:
+** These give the bounds for the region of blocks in question.
+* rel_x / rel_y / rel_z:
+** These may be used as a shorthand if min==max.
+** The fill will include both the min and max for the filled blocks.
+* block: Give a name for the block type to fill with.
+* replace (optional): Give a block type this fill replaces.
+** If absent, the area is filled unconditionally with the new block type.
+** If present, only fill if the block at the target matches the replace block.
+
+Relight command:
+* 'relight': Perform lighting and occlusion checks.
+** Will propagate light from light sources.
+** Will update block occlusion masks and similar.
+** Should be run after the rest of the structure is instantiated.
+* min_x / min_y / min_z / max_x / max_y / max_z:
+** These give the bounds for the region of blocks in question.
+
+Instance command:
+* 'instance': Create a new instance of an object at the specified location.
+* rel_x / rel_y / rel_z:
+** Gives the relative location at which the object is to be instantiated.
+* name (semi-optional):
+** Give the name of the structure to be instantiated.
+* subname (semi-optional):
+** Give the name of the object to be instantiated.
+
+Random command (list):
+* 'random': Execute one of the sub-comnmands at random.
+** When random is executed, it executes only a single one of its sub-commands.
+
+List command (list):
+* 'list': Execute a list of sub-commands.
+
+Random command (variable):
+* 'random': Generate a random integer.
+* name: Name of the variable to bind.
+* min / max: Give the minimum and maximum value for the random number.
+** If absent, generate a random number between 0 and 65535.

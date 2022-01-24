@@ -274,6 +274,18 @@ The entities will be contained within an 'entities' tag in both cases.
 ** Entities may contain sub-tags.
 *** These will depend on the entity in question.
 
+Entity Variable:
+* 'entvar': Entity variable.
+* name: Name of entity variable.
+* value: Value for entity variable.
+
+Inventory:
+* 'inven': Contents of an inventory slot.
+* index: Which slot this applies to.
+* count: How many of these are present.
+* item: Type of item in this slot.
+
+
 The origin will be given in absolute world coordinates.
 * These will be relative to a 1 meter base unit.
 * The X and Y coordinates will be constrained to the range of 0 to 65536.

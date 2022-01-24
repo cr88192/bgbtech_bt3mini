@@ -16,22 +16,45 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 byte *FS_LoadFile(char *name, int *rsz, int pad);
 
-byte *btm_freelist_mul64k[256];
-byte *btm_freelist_mul4k[256];
-byte *btm_freelist_mul256b[256];
+byte * volatile btm_freelist_mul64k[256];
+byte * volatile btm_freelist_mul4k[256];
+byte * volatile btm_freelist_mul256b[256];
+void * volatile btm_alloc_mutex;
+
+int btm_totalloc_mul64k[256];
+int btm_totalloc_mul4k[256];
+int btm_totalloc_mul256b[256];
+
+int BTM_LockAlloc()
+{
+	if(!btm_alloc_mutex)
+		btm_alloc_mutex=thMutex();
+	thLockMutex(btm_alloc_mutex);
+	return(0);
+}
+
+int BTM_UnlockAlloc()
+{
+	thUnlockMutex(btm_alloc_mutex);
+	return(0);
+}
 
 void *BTM_AllocMul64K(int n)
 {
 	byte *ptr;
 	
+	BTM_LockAlloc();
 	ptr=btm_freelist_mul64k[n];
 	if(ptr)
 	{
 		btm_freelist_mul64k[n]=*(byte **)ptr;
+		BTM_UnlockAlloc();
 		return(ptr);
 	}
 	
+	btm_totalloc_mul64k[n]+=n<<16;
 	ptr=btm_malloc(n<<16);
+	BTM_UnlockAlloc();
 	return(ptr);
 }
 
@@ -42,14 +65,18 @@ void *BTM_AllocMul4K(int n)
 	if(n>=64)
 		return(BTM_AllocMul64K((n+15)>>4));
 	
+	BTM_LockAlloc();
 	ptr=btm_freelist_mul4k[n];
 	if(ptr)
 	{
 		btm_freelist_mul4k[n]=*(byte **)ptr;
+		BTM_UnlockAlloc();
 		return(ptr);
 	}
 	
+	btm_totalloc_mul4k[n]+=n<<12;
 	ptr=btm_malloc(n<<12);
+	BTM_UnlockAlloc();
 	return(ptr);
 }
 
@@ -60,21 +87,27 @@ void *BTM_AllocMul256B(int n)
 	if(n>=64)
 		return(BTM_AllocMul4K((n+15)>>4));
 	
+	BTM_LockAlloc();
 	ptr=btm_freelist_mul256b[n];
 	if(ptr)
 	{
 		btm_freelist_mul256b[n]=*(byte **)ptr;
+		BTM_UnlockAlloc();
 		return(ptr);
 	}
 	
+	btm_totalloc_mul256b[n]+=n<<8;
 	ptr=btm_malloc(n<<8);
+	BTM_UnlockAlloc();
 	return(ptr);
 }
 
 int BTM_FreeMul64K(void *ptr, int n)
 {
+	BTM_LockAlloc();
 	*(byte **)ptr=btm_freelist_mul64k[n];
 	btm_freelist_mul64k[n]=ptr;
+	BTM_UnlockAlloc();
 	return(0);
 }
 
@@ -86,8 +119,10 @@ int BTM_FreeMul4K(void *ptr, int n)
 		return(0);
 	}
 
+	BTM_LockAlloc();
 	*(byte **)ptr=btm_freelist_mul4k[n];
 	btm_freelist_mul4k[n]=ptr;
+	BTM_UnlockAlloc();
 	return(0);
 }
 
@@ -99,8 +134,10 @@ int BTM_FreeMul256B(void *ptr, int n)
 		return(0);
 	}
 
+	BTM_LockAlloc();
 	*(byte **)ptr=btm_freelist_mul256b[n];
 	btm_freelist_mul256b[n]=ptr;
+	BTM_UnlockAlloc();
 	return(0);
 }
 
@@ -413,11 +450,17 @@ int BTM_RegionCheckExpand(
 		k=(n+31)/32;
 //		rgn->img_bmp=btm_realloc(rgn->img_bmp, k*8);
 		bm1=BTM_AllocMul256B((k*8)>>8);
+		memset(bm1, 0, k*8);
 		memcpy(bm1, rgn->img_bmp, j*8);
 		BTM_FreeMul256B(rgn->img_bmp, (j*8)>>8);
 		rgn->img_bmp=bm1;
 		
-		memset(((byte *)rgn->img_bmp)+(j*8), 0, (k-j)*8);
+		if((k*8)&255)
+			{ debug_break }
+		if((j*8)&255)
+			{ debug_break }
+		
+//		memset(((byte *)rgn->img_bmp)+(j*8), 0, (k-j)*8);
 		rgn->img_ncell=n;
 	}
 	
@@ -438,7 +481,8 @@ int BTM_RegionAllocSpan(
 			break;
 
 		sz=rgn->img_sz;
-		sz=sz+(sz>>1);
+//		sz=sz+(sz>>1);
+		sz=sz+(cnt<<4);
 		BTM_RegionCheckExpand(wrl, rgn, sz);
 	}
 
@@ -475,6 +519,13 @@ int BTM_TryLoadRegionImage(BTM_World *wrl, BTM_Region *rgn)
 		memset(rgn->voxbm, 0, 128*128*128/8);
 		for(i=0; i<512; i++)
 			rgn->voxbmix[i]=i;
+
+		rgn->magic1=BTM_MAGIC1;
+		rgn->magic2=BTM_MAGIC1;
+		rgn->magic3=BTM_MAGIC1;
+		rgn->magic4=BTM_MAGIC1;
+		rgn->magic5=BTM_MAGIC1;
+
 		return(-1);
 	}
 	
@@ -517,6 +568,9 @@ int BTM_TryLoadRegionImage(BTM_World *wrl, BTM_Region *rgn)
 			rgn->voxbm_n=0;
 		}else
 		{
+			if(bmsz>(1<<16))
+				{ debug_break }
+		
 			rgn->voxbm=BTM_WorldAllocSq(wrl, 16);
 
 			memcpy(rgn->voxbm, bmbuf, bmsz);
@@ -550,6 +604,12 @@ int BTM_TryLoadRegionImage(BTM_World *wrl, BTM_Region *rgn)
 
 	BCCX_ClearZoneLevel(BCCX_ZTY_REDUCE);
 
+	rgn->magic1=BTM_MAGIC1;
+	rgn->magic2=BTM_MAGIC1;
+	rgn->magic3=BTM_MAGIC1;
+	rgn->magic4=BTM_MAGIC1;
+	rgn->magic5=BTM_MAGIC1;
+
 	return(0);
 }
 
@@ -557,7 +617,7 @@ int btm_stat_malloc_szregion;
 
 int BTM_PrintAllocStats()
 {
-	int i, j, k, p2tot;
+	int i, j, k, p2tot, tot;
 	printf("Region Headers: %dK\n", btm_stat_malloc_szregion>>10);
 	printf("BCCX Node: %dK\n", bccx_stat_sznode>>10);
 	printf("BCCX NodeList: %dK\n", bccx_stat_sznodelist>>10);
@@ -572,6 +632,34 @@ int BTM_PrintAllocStats()
 	}
 
 	printf("Pow2: Tot %dK\n", p2tot>>10);
+	
+	tot=0;
+	for(i=0; i<256; i++)
+	{
+		if(!btm_totalloc_mul64k[i])
+			continue;
+		printf("Mul64K: %d %dK\n", i, btm_totalloc_mul64k[i]>>10);
+		tot+=btm_totalloc_mul64k[i];
+	}
+
+	for(i=0; i<256; i++)
+	{
+		if(!btm_totalloc_mul4k[i])
+			continue;
+		printf("Mul4K: %d %dK\n", i, btm_totalloc_mul4k[i]>>10);
+		tot+=btm_totalloc_mul4k[i];
+	}
+
+	for(i=0; i<256; i++)
+	{
+		if(!btm_totalloc_mul256b[i])
+			continue;
+		printf("Mul256B: %d %dK\n", i, btm_totalloc_mul256b[i]>>10);
+		tot+=btm_totalloc_mul256b[i];
+	}
+
+	printf("Mul: Tot %dK\n", tot>>10);
+
 	return(0);
 }
 
@@ -601,11 +689,15 @@ BTM_Region *BTM_LookupRegionForRix(BTM_World *wrl, int rix)
 	h=((rix*65521)>>16)&63;
 	rgn=wrl->rgn_luhash[h];
 	if(rgn && (rgn->rgnix==rix))
+	{
+		BTM_ValidateRegionMagics(wrl, rgn);
 		return(rgn);
+	}
 	
 	rgn=wrl->region;
 	while(rgn)
 	{
+		BTM_ValidateRegionMagics(wrl, rgn);
 		if(rgn->rgnix==rix)
 		{
 			wrl->rgn_luhash[h]=rgn;
@@ -625,11 +717,15 @@ BTM_Region *BTM_GetRegionForRix(BTM_World *wrl, int rix)
 	h=((rix*65521)>>16)&63;
 	rgn=wrl->rgn_luhash[h];
 	if(rgn && (rgn->rgnix==rix))
+	{
+		BTM_ValidateRegionMagics(wrl, rgn);
 		return(rgn);
+	}
 	
 	rgn=wrl->region;
 	while(rgn)
 	{
+		BTM_ValidateRegionMagics(wrl, rgn);
 		if(rgn->rgnix==rix)
 		{
 			wrl->rgn_luhash[h]=rgn;
@@ -799,7 +895,7 @@ int BTM_RegionDoLoadChunkCix(BTM_World *wrl, BTM_Region *rgn, int ch)
 	byte *voxb, *voxh;
 	u64 bm;
 	u32 tag, blk;
-	int ofs, sz, dsz, cm, cix;
+	int ofs, sz, dsz, cm, cix, dsz1;
 	int mfl, nvox, mi;
 	int i, j, k;
 	
@@ -815,6 +911,7 @@ int BTM_RegionDoLoadChunkCix(BTM_World *wrl, BTM_Region *rgn, int ch)
 	
 	if(((tag>>28)&15)!=12)
 	{
+		printf("BTM_RegionDoLoadChunkCix: Discard, Bad Tag\n");
 		rgn->chk_ofsz[ch]=0;
 		return(-1);
 	}
@@ -826,10 +923,20 @@ int BTM_RegionDoLoadChunkCix(BTM_World *wrl, BTM_Region *rgn, int ch)
 	
 	if(cm==3)
 	{
-		TgvLz_DecodeBufferRP2(dat+4, wrl->lz_tdecbuf, sz-4, dsz);
+		dsz1=TgvLz_DecodeBufferRP2(dat+4, wrl->lz_tdecbuf, sz-4, dsz);
+		if(dsz1!=dsz)
+		{
+			printf("BTM_RegionDoLoadChunkCix: RP2 Size Mismatch %d->%d\n",
+				dsz, dsz1);
+		}
 	}else if(cm==4)
 	{
-		TgvLz_DecodeBufferLZ4(dat+4, wrl->lz_tdecbuf, sz-4, dsz);
+		dsz1=TgvLz_DecodeBufferLZ4(dat+4, wrl->lz_tdecbuf, sz-4, dsz);
+		if(dsz1!=dsz)
+		{
+			printf("BTM_RegionDoLoadChunkCix: LZ4 Size Mismatch %d->%d\n",
+				dsz, dsz1);
+		}
 	}else if(cm==0)
 	{
 		k=sz-4;
@@ -966,6 +1073,7 @@ byte *BTM_RegionDoLoadBufferIx(BTM_World *wrl, BTM_Region *rgn,
 	
 	if(((tag>>28)&15)!=14)
 	{
+		printf("BTM_RegionDoLoadBufferIx: Discard, Bad Tag\n");
 		rgn->chk_ofsz[ch]=0;
 		return(NULL);
 	}
@@ -1010,8 +1118,10 @@ int BTM_RegionDoCompactChunkCix(BTM_World *wrl, BTM_Region *rgn, int ch)
 	byte tvxb[4096];
 	byte tvxh[2050];
 	u32 *voxa;
+	u64 *voxbm;
 	byte *voxb, *voxh;
 	u32 blk;
+	u64 bm;
 	int nvox, nv1, mi;
 	int i, j, k;
 
@@ -1021,11 +1131,47 @@ int BTM_RegionDoCompactChunkCix(BTM_World *wrl, BTM_Region *rgn, int ch)
 	nvox=rgn->vox_n[ch];
 	mi=rgn->vox_m[ch];
 
+	voxbm=rgn->voxbm+(rgn->voxbmix[ch]*64);
+
 	if(!voxa)
 		return(0);
 	
 	if(voxh)
 	{
+		for(i=0; i<4096; i++)
+		{
+			j=voxh[i>>1];
+			j=(j>>((i&1)*4))&15;
+			if(j>=nvox)
+				break;
+			blk=voxa[j];
+			
+			if(!(blk&255))
+				break;
+	
+			bm=voxbm[i>>6];
+			if(bm&(1ULL<<(i&63)))
+			{
+				if((blk&255)<4)
+					break;
+			}else
+			{
+				if((blk&255)>=4)
+					break;
+			}
+		}
+		
+		if(i<4096)
+		{
+			printf("BTM_RegionDoCompactChunkCix: Discard Damaged Chunk H\n");
+			rgn->voxa[ch]=NULL;
+			rgn->voxb[ch]=NULL;
+			rgn->voxh[ch]=NULL;
+			rgn->vox_n[ch]=0;
+			rgn->vox_m[ch]=0;
+			return(0);
+		}
+	
 		k=voxh[0];
 		if((k&15)==(k>>4))
 		{
@@ -1055,6 +1201,40 @@ int BTM_RegionDoCompactChunkCix(BTM_World *wrl, BTM_Region *rgn, int ch)
 
 	if(voxb)
 	{
+		for(i=0; i<4096; i++)
+		{
+			j=voxb[i];
+			if(j>=nvox)
+				break;
+
+			blk=voxa[j];
+			
+			if(!(blk&255))
+				break;
+	
+			bm=voxbm[i>>6];
+			if(bm&(1ULL<<(i&63)))
+			{
+				if((blk&255)<4)
+					break;
+			}else
+			{
+				if((blk&255)>=4)
+					break;
+			}
+		}
+		
+		if(i<4096)
+		{
+			printf("BTM_RegionDoCompactChunkCix: Discard Damaged Chunk B\n");
+			rgn->voxa[ch]=NULL;
+			rgn->voxb[ch]=NULL;
+			rgn->voxh[ch]=NULL;
+			rgn->vox_n[ch]=0;
+			rgn->vox_m[ch]=0;
+			return(0);
+		}
+	
 		k=voxb[0];
 		for(i=0; i<4096; i++)
 			if(voxb[i]!=k)
@@ -1087,6 +1267,36 @@ int BTM_RegionDoCompactChunkCix(BTM_World *wrl, BTM_Region *rgn, int ch)
 
 	if(rgn->chk_ofsz[ch])
 		return(0);
+
+
+	for(i=0; i<4096; i++)
+	{
+		blk=voxa[i];
+		if(!(blk&255))
+			break;
+	
+		bm=voxbm[i>>6];
+		if(bm&(1ULL<<(i&63)))
+		{
+			if((blk&255)<4)
+				break;
+		}else
+		{
+			if((blk&255)>=4)
+				break;
+		}
+	}
+	
+	if(i<4096)
+	{
+		printf("BTM_RegionDoCompactChunkCix: Discard Damaged Chunk A\n");
+		rgn->voxa[ch]=NULL;
+		rgn->voxb[ch]=NULL;
+		rgn->voxh[ch]=NULL;
+		rgn->vox_n[ch]=0;
+		rgn->vox_m[ch]=0;
+		return(0);
+	}
 
 	nv1=0;
 	for(i=0; i<4096; i++)
@@ -1178,6 +1388,12 @@ int BTM_RegionDoStoreChunkCix(BTM_World *wrl, BTM_Region *rgn, int ch)
 	voxb=rgn->voxb[ch];
 	voxh=rgn->voxh[ch];
 	nvox=rgn->vox_n[ch];
+	
+	if(!voxa)
+	{
+		printf("BTM_RegionDoStoreChunkCix: Chunk Disappeared\n");
+		return(-2);
+	}
 	
 	BTM_WorldCheckMinEncBuf(wrl, 48*1024);
 	BTM_WorldCheckMinEnc2Buf(wrl, 48*1024);
@@ -1308,6 +1524,10 @@ int BTM_RegionDoStoreBufferIx(BTM_World *wrl,
 		BTM_RegionMarkFreeCellSpan(wrl, rgn,
 			rgn->chk_ofsz[512+ch]&0x000FFFFFU,
 			rgn->chk_ofsz[512+ch]>>20);
+		memset(
+			rgn->img_dat+(rgn->chk_ofsz[512+ch]&0x000FFFFFU)*16,
+			0, 
+			(rgn->chk_ofsz[512+ch]>>20)*16);
 		rgn->chk_ofsz[512+ch]=0;
 	}
 
@@ -1321,6 +1541,25 @@ int BTM_RegionDoStoreBufferIx(BTM_World *wrl,
 		{ __debugbreak(); }
 	
 	rgn->chk_ofsz[512+ch]=bcel|(ncel<<20);
+	return(0);
+}
+
+int BTM_ValidateRegionMagics(BTM_World *wrl, BTM_Region *rgn)
+{
+	if(rgn->img_dat && memcmp(rgn->img_dat, "BTMRGN01", 8))
+		{ debug_break }
+	
+	if(rgn->magic1!=BTM_MAGIC1)
+		{ debug_break }
+	if(rgn->magic2!=BTM_MAGIC1)
+		{ debug_break }
+	if(rgn->magic3!=BTM_MAGIC1)
+		{ debug_break }
+	if(rgn->magic4!=BTM_MAGIC1)
+		{ debug_break }
+	if(rgn->magic5!=BTM_MAGIC1)
+		{ debug_break }
+	
 	return(0);
 }
 
@@ -1350,11 +1589,18 @@ int BTM_FlattenRegion(BTM_World *wrl, BTM_Region *rgn)
 		return(0);
 	}
 	
+	BTM_ValidateRegionMagics(wrl, rgn);
+	
 	if(rgn->dirty&1)
 	{
 		for(i=0; i<512; i++)
 		{
-			BTM_RegionDoStoreChunkCix(wrl, rgn, i);
+			k=BTM_RegionDoStoreChunkCix(wrl, rgn, i);
+			if(k<0)
+			{
+				printf("BTM_FlattenRegion: Damaged Chunks, Abort\n");
+				return(-1);
+			}
 		}
 
 		if(!tentbuf)
@@ -1518,7 +1764,7 @@ int BTM_CheckUnloadRegions(BTM_World *wrl)
 	BTM_Region *rcur, *rnxt, *rulst, *rklst;
 	BCCX_Node *tnode;
 	u64 rpos;
-	int cx, cy, vx, vy, dx, dy, d, tesz;
+	int cx, cy, vx, vy, dx, dy, d, tesz, rt, uld;
 
 	vx=(wrl->cam_org>> 8)&0xFFFF;
 	vy=(wrl->cam_org>>32)&0xFFFF;
@@ -1538,12 +1784,20 @@ int BTM_CheckUnloadRegions(BTM_World *wrl)
 		BCCX_ClearZoneLevel(BCCX_ZTY_REDUCE);
 	}
 
+	uld=(2*btm_drawdist);
+//	uld=(1.5*btm_drawdist);
+	if(uld<192)
+		uld=192;
+
 	rulst=NULL;
 	rklst=NULL;
 	rcur=wrl->region;
 	while(rcur)
 	{
-		BTM_FlattenRegion(wrl, rcur);
+		BTM_ValidateRegionMagics(wrl, rcur);
+		rt=BTM_FlattenRegion(wrl, rcur);
+
+		BTM_ValidateRegionMagics(wrl, rcur);
 
 //		rpos=BTM_ConvRixToBlkPos(rcur->rgnix);
 		rpos=BTM_ConvRixToBlkPosCenter(rcur->rgnix);
@@ -1561,7 +1815,9 @@ int BTM_CheckUnloadRegions(BTM_World *wrl)
 			d=dy+(dx>>1);
 
 //		if(d>=384)
-		if(d>=192)
+//		if(d>=192)
+//		if((d>=244) || (rt<0))
+		if((d>=uld) || (rt<0))
 //		if(d>=448)
 //		if(d>=512)
 		{
@@ -1586,6 +1842,7 @@ int BTM_CheckUnloadRegions(BTM_World *wrl)
 	rcur=rklst;
 	while(rcur)
 	{
+		BTM_ValidateRegionMagics(wrl, rcur);
 		rcur->next=wrl->region;
 		wrl->region=rcur;
 		rcur=rcur->unext;
@@ -1752,6 +2009,10 @@ int BTM_SetRegionBlockCix(BTM_World *wrl,
 		BTM_RegionMarkFreeCellSpan(wrl, rgn,
 			rgn->chk_ofsz[ch]&0x000FFFFFU,
 			rgn->chk_ofsz[ch]>>20);
+		memset(
+			rgn->img_dat+(rgn->chk_ofsz[ch]&0x000FFFFFU)*16,
+			0, 
+			(rgn->chk_ofsz[ch]>>20)*16);
 	}
 	rgn->chk_ofsz[ch]=0;
 	

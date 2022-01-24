@@ -15,8 +15,50 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 
-int BTMGL_DrawEntityBasic(BTM_World *wrl,
-	BTM_MobEntity *mob)
+BTM_MobSprite	* volatile btm_vissprites;
+
+BTM_MobSprite	* volatile btm_freesprites;
+BTM_MobSprite	* volatile btm_buildsprites;
+void * volatile btm_sprite_mutex;
+
+int BTM_LockSprites()
+{
+	if(!btm_sprite_mutex)
+		btm_sprite_mutex=thMutex();
+	thLockMutex(btm_sprite_mutex);
+	return(0);
+}
+
+int BTM_UnlockSprites()
+{
+	thUnlockMutex(btm_sprite_mutex);
+	return(0);
+}
+
+BTM_MobSprite *BTM_AllocSprite()
+{
+	BTM_MobSprite *tmp;
+	tmp=btm_freesprites;
+	if(tmp)
+	{
+		btm_freesprites=tmp->next;
+		return(tmp);
+	}
+	
+	tmp=btm_malloc(sizeof(BTM_MobSprite));
+	return(tmp);
+}
+
+int BTM_FreeSprite(BTM_MobSprite *spr)
+{
+	spr->next=btm_freesprites;
+	btm_freesprites=spr;
+	return(0);
+}
+
+
+int BTMGL_DrawSprite(BTM_World *wrl,
+	BTM_MobSprite *mob)
 {
 	float sorg[3], vorg[3], v_fw[3], v_rt[3];
 	float so_lf[3], so_rt[3];
@@ -63,8 +105,9 @@ int BTMGL_DrawEntityBasic(BTM_World *wrl,
 			cy-=cxfull;		}
 #endif
 
-	ll=BTM_GetLightForXYZ(wrl, cx>>8, cy>>8, cz>>8);
-	rgb=BTM_GetColorRgbForBlockLight(ll);
+//	ll=BTM_GetLightForXYZ(wrl, cx>>8, cy>>8, cz>>8);
+//	rgb=BTM_GetColorRgbForBlockLight(ll);
+	rgb=mob->spr_rgb;
 
 //	tex=mob->spr_id;
 	tex=BTMGL_LoadSpriteForName(
@@ -147,32 +190,86 @@ int BTMGL_DrawEntityBasic(BTM_World *wrl,
 	to_tlf[0]=os+0.00;	to_tlf[1]=ot+0.00;
 	to_trt[0]=os+0.25;	to_trt[1]=ot+0.00;
 
-	tkra_glBindTexture(TKRA_TEXTURE_2D, tex);
-//	tkra_glColor4f(1.0, 1.0, 1.0, 1.0);
-//	tkra_glColor4ubv((void *)&rgb);
-	tkra_glColor4f(
+	pglBindTexture(TKRA_TEXTURE_2D, tex);
+//	pglColor4f(1.0, 1.0, 1.0, 1.0);
+	pglColor4ubv((void *)&rgb);
+//	pglColor4f(
 //		((rgb    )&255)*(1.0/255),
-		((rgb>>16)&255)*(1.0/255),
-		((rgb>> 8)&255)*(1.0/255),
 //		((rgb>>16)&255)*(1.0/255),
-		((rgb>> 0)&255)*(1.0/255),
-		1.0);
+//		((rgb>> 8)&255)*(1.0/255),
+//		((rgb>>16)&255)*(1.0/255),
+//		((rgb>> 0)&255)*(1.0/255),
+//		1.0);
 	
-	tkra_glBegin(GL_QUADS);
+	pglBegin(GL_QUADS);
 
-	tkra_glTexCoord2fv(to_tlf);
-	tkra_glVertex3fv(so_tlf);
+	pglTexCoord2fv(to_tlf);
+	pglVertex3fv(so_tlf);
 
-	tkra_glTexCoord2fv(to_lf);
-	tkra_glVertex3fv(so_lf);
+	pglTexCoord2fv(to_lf);
+	pglVertex3fv(so_lf);
 
-	tkra_glTexCoord2fv(to_rt);
-	tkra_glVertex3fv(so_rt);
+	pglTexCoord2fv(to_rt);
+	pglVertex3fv(so_rt);
 
-	tkra_glTexCoord2fv(to_trt);
-	tkra_glVertex3fv(so_trt);
+	pglTexCoord2fv(to_trt);
+	pglVertex3fv(so_trt);
 
-	tkra_glEnd();
+	pglEnd();
+	
+	return(0);
+}
+
+int BTMGL_DrawVisibleSprites(BTM_World *wrl)
+{
+	BTM_MobSprite	*mob;
+	
+	BTM_LockSprites();
+	mob=btm_vissprites;
+	while(mob)
+	{
+		BTMGL_DrawSprite(wrl, mob);
+		mob=mob->next;
+	}
+	BTM_UnlockSprites();
+	
+	return(0);
+}
+
+
+int BTMGL_DrawEntityBasic(BTM_World *wrl,
+	BTM_MobEntity *mob)
+{
+	BTM_MobSprite	*spr;
+	int cx, cy, cz;
+	int ll;
+	u32 rgb;
+
+	spr=BTM_AllocSprite();
+	
+	cx=mob->org_x;
+	cy=mob->org_y;
+	cz=mob->org_z;
+	
+	spr->org_x=cx;
+	spr->org_y=cy;
+	spr->org_z=cz;
+	spr->yaw=mob->yaw;
+	spr->pitch=mob->pitch;
+
+	spr->spr_dxs=mob->spr_dxs;
+	spr->spr_dzs=mob->spr_dzs;
+
+	spr->spr_base=mob->spr_base;
+	spr->spr_seq=mob->spr_seq;
+	spr->spr_frame=mob->spr_frame;
+
+	ll=BTM_GetLightForXYZ(wrl, cx>>8, cy>>8, cz>>8);
+	rgb=BTM_GetColorRgbForBlockLight(ll);
+	spr->spr_rgb=rgb;
+	
+	spr->next=btm_buildsprites;
+	btm_buildsprites=spr;
 	
 	return(0);
 }
@@ -199,7 +296,7 @@ int BTMGL_LoadTextureForName(char *name)
 	if(tbuf)
 	{
 		tex=btmgl_tex_rov++;
-		tkra_glBindTexture(TKRA_TEXTURE_2D, tex);
+		pglBindTexture(TKRA_TEXTURE_2D, tex);
 		BTMGL_UploadCompressed(tbuf, 1, 1);
 		free(tbuf);
 	}else
@@ -450,12 +547,26 @@ int BTM_CheckMobCanMoveSpot(BTM_World *wrl, BTM_MobEntity *self, u64 spot)
 	
 	cpos=BTM_MobGetOriginPos(wrl, self);
 
-	blk0=BTM_GetWorldBlockCorg(wrl, spot);
-	blk1=BTM_GetWorldBlockCorg(wrl, spot-(1LL<<56));
-	blk2=BTM_GetWorldBlockCorg(wrl, spot+(1LL<<56));
+	blk0=BTM_TryGetWorldBlockCorg(wrl, spot);
+	if(!(blk0&255))
+		return(0);
 
-	blkc0=BTM_GetWorldBlockCorg(wrl, cpos);
-	blkc1=BTM_GetWorldBlockCorg(wrl, cpos-(1LL<<56));
+	blk1=BTM_TryGetWorldBlockCorg(wrl, spot-(1LL<<56));
+	blk2=BTM_TryGetWorldBlockCorg(wrl, spot+(1LL<<56));
+
+	if(!(blk1&255))
+		return(0);
+	if(!(blk2&255))
+		return(0);
+
+
+	blkc0=BTM_TryGetWorldBlockCorg(wrl, cpos);
+	blkc1=BTM_TryGetWorldBlockCorg(wrl, cpos-(1LL<<56));
+
+	if(!(blkc0&255))
+		return(0);
+	if(!(blkc1&255))
+		return(0);
 
 	if((blk0&255)>=4)
 	{
@@ -680,6 +791,8 @@ bccx_cxstate	bccx_org_y;
 bccx_cxstate	bccx_org_z;
 bccx_cxstate	bccx_yaw;
 bccx_cxstate	bccx_pitch;
+bccx_cxstate	bccx_flags;
+bccx_cxstate	bccx_entvar;
 
 bccx_cxstate	bccx_name;
 bccx_cxstate	bccx_value;
@@ -687,13 +800,140 @@ bccx_cxstate	bccx_global;
 bccx_cxstate	bccx_player;
 bccx_cxstate	bccx_time;
 bccx_cxstate	bccx_day;
+bccx_cxstate	bccx_inven;
+bccx_cxstate	bccx_index;
+bccx_cxstate	bccx_count;
+bccx_cxstate	bccx_item;
+
+int BTM_MobBindVarInt(BTM_MobEntity *mob, char *name, s64 val)
+{
+	BCCX_AttrVal *av;
+	int i, j, k, ix;
+
+	ix=BCCX_StringToStridx(name);
+
+	i=mob->mobvar_cnt-1;
+	while(i>=0)
+	{
+		j=mob->mobvar_name[i];
+		if((j&4095)==ix)
+		{
+			av=(BCCX_AttrVal *)(mob->mobvar_val+i);
+			mob->mobvar_name[i]=ix|(BCCX_IVTY_INT<<12);
+			av->i=val;
+			return(0);
+		}
+		i--;
+	}
+
+	i=mob->mobvar_cnt++;
+	av=(BCCX_AttrVal *)(mob->mobvar_val+i);
+	mob->mobvar_name[i]=ix|(BCCX_IVTY_INT<<12);
+	av->i=val;
+
+	return(0);
+}
+
+int BTM_MobBindVarReal(BTM_MobEntity *mob, char *name, double val)
+{
+	BCCX_AttrVal *av;
+	int i, j, k, ix;
+
+	ix=BCCX_StringToStridx(name);
+
+	i=mob->mobvar_cnt-1;
+	while(i>=0)
+	{
+		j=mob->mobvar_name[i];
+		if((j&4095)==ix)
+		{
+			av=(BCCX_AttrVal *)(mob->mobvar_val+i);
+			mob->mobvar_name[i]=ix|(BCCX_IVTY_REAL<<12);
+			av->f=val;
+			return(0);
+		}
+		i--;
+	}
+
+	i=mob->mobvar_cnt++;
+	av=(BCCX_AttrVal *)(mob->mobvar_val+i);
+	mob->mobvar_name[i]=ix|(BCCX_IVTY_REAL<<12);
+	av->f=val;
+
+	return(0);
+}
+
+int BTM_MobBindVarStr(BTM_MobEntity *mob, char *name, char *val)
+{
+	BCCX_AttrVal *av;
+	int i, j, k, ix;
+
+	ix=BCCX_StringToStridx(name);
+
+	i=mob->mobvar_cnt-1;
+	while(i>=0)
+	{
+		j=mob->mobvar_name[i];
+		if((j&4095)==ix)
+		{
+			av=(BCCX_AttrVal *)(mob->mobvar_val+i);
+			mob->mobvar_name[i]=ix|(BCCX_IVTY_STRING<<12);
+			av->s=bccx_strdup(val);
+			return(0);
+		}
+		i--;
+	}
+
+	i=mob->mobvar_cnt++;
+	av=(BCCX_AttrVal *)(mob->mobvar_val+i);
+	mob->mobvar_name[i]=ix|(BCCX_IVTY_STRING<<12);
+	av->s=bccx_strdup(val);
+
+	return(0);
+}
+
+int BTM_SpawnRegionEntitySubTag(BTM_World *wrl,
+	BTM_Region *rgn, BTM_MobEntity *mob, BCCX_Node *ent)
+{
+	char *name, *str;
+	s64 li;
+	double lf;
+	int ani, vx, vy, vz;
+
+	if(BCCX_TagIsCstP(ent, &bccx_entvar, "entvar"))
+	{
+		name=BCCX_GetCst(ent, &bccx_name, "name");
+		ani=BCCX_GetAttrNameCst(ent, &bccx_value, "value");
+		
+		if((ani>>12)==BCCX_IVTY_INT)
+		{
+			li=BCCX_GetIntCst(ent, &bccx_value, "value");
+			BTM_MobBindVarInt(mob, name, li);
+		}else
+			if((ani>>12)==BCCX_IVTY_REAL)
+		{
+			lf=BCCX_GetFloatCst(ent, &bccx_value, "value");
+			BTM_MobBindVarReal(mob, name, lf);
+		}else if((ani>>12)==BCCX_IVTY_STRING)
+		{
+			str=BCCX_GetCst(ent, &bccx_value, "value");
+			BTM_MobBindVarStr(mob, name, str);
+		}
+		
+		return(0);
+	}
+		
+	return(0);
+}
 
 int BTM_SpawnRegionEntity(BTM_World *wrl,
 	BTM_Region *rgn, BCCX_Node *ent)
 {
 	double org[3];
 	BTM_MobEntity *mob;
+	BCCX_Node *nt1;
 	char *cname;
+	int na, ci;
 	int yaw, pitch;
 
 	if(BCCX_TagIsCstP(ent, &bccx_mobj, "mobj"))
@@ -723,6 +963,14 @@ int BTM_SpawnRegionEntity(BTM_World *wrl,
 		
 		mob->next=rgn->live_entity;
 		rgn->live_entity=mob;
+
+		na=BCCX_GetNodeChildCount(ent);
+		for(ci=0; ci<na; ci++)
+		{
+			nt1=BCCX_GetNodeIndex(ent, ci);
+			BTM_SpawnRegionEntitySubTag(wrl, rgn, mob, nt1);
+		}
+
 		
 		BTM_RunSpawnerForEntity(wrl, mob);
 		return(0);
@@ -753,8 +1001,11 @@ int BTM_SpawnRegionEntities(BTM_World *wrl,
 BCCX_Node *BTM_FlattenRegionLiveEntities(
 	BTM_World *wrl, BTM_Region *rgn)
 {
-	BCCX_Node *ntmp, *elst;
+	BCCX_Node *ntmp, *elst, *nt1;
 	BTM_MobEntity *mob;
+	BCCX_AttrVal *av;
+	char *str;
+	int i, j, k, ix;
 
 	mob=rgn->live_entity;
 	if(!mob)
@@ -776,6 +1027,32 @@ BCCX_Node *BTM_FlattenRegionLiveEntities(
 		if(mob->pitch)
 			BCCX_SetIntCst(ntmp, &bccx_pitch, "pitch", mob->pitch);
 		
+		for(i=0; i<mob->mobvar_cnt; i++)
+		{
+			av=(BCCX_AttrVal *)(mob->mobvar_val+i);
+			ix=mob->mobvar_name[i];
+			str=BCCX_StridxToString(ix);
+			
+			nt1=BCCX_NewCst(&bccx_entvar, "entvar");
+			BCCX_SetCst(nt1, &bccx_name, "name", str);
+
+			if((ix>>12)==BCCX_IVTY_INT)
+			{
+				BCCX_SetIntCst(nt1, &bccx_value, "value", av->i);
+			}else if((ix>>12)==BCCX_IVTY_REAL)
+			{
+				BCCX_SetFloatCst(nt1, &bccx_value, "value", av->f);
+			}else if((ix>>12)==BCCX_IVTY_STRING)
+			{
+				BCCX_SetCst(nt1, &bccx_value, "value", av->s);
+			}else if((ix>>12)==BCCX_IVTY_NODE)
+			{
+				BCCX_Add(nt1, BCCX_New1("value", BCCX_CloneS(av->p)));
+			}
+
+			BCCX_Add(ntmp, nt1);
+		}
+		
 		BCCX_Add(elst, ntmp);
 
 		mob=mob->next;
@@ -787,10 +1064,11 @@ BCCX_Node *BTM_FlattenRegionLiveEntities(
 int BTM_SpawnWorldGlobal(BTM_World *wrl, BCCX_Node *ent)
 {
 	double org[3];
+	BCCX_Node *tn1, *tn2, *tn3;
 	char *name, *str;
 	s64 li, cpos;
 	double lf;
-	int ani, vx, vy, vz;
+	int ani, vx, vy, vz, na, ci, ix, cn, it;
 
 	if(BCCX_TagIsCstP(ent, &bccx_global, "global"))
 	{
@@ -822,6 +1100,7 @@ int BTM_SpawnWorldGlobal(BTM_World *wrl, BCCX_Node *ent)
 		org[2]=BCCX_GetFloatCst(ent, &bccx_org_z, "org_z");
 		wrl->cam_yaw=BCCX_GetIntCst(ent, &bccx_yaw, "yaw");
 		wrl->cam_pitch=BCCX_GetIntCst(ent, &bccx_pitch, "pitch");
+		wrl->cam_flags=BCCX_GetIntCst(ent, &bccx_flags, "flags");
 		
 		vx=org[0]*256.0;
 		vy=org[1]*256.0;
@@ -835,7 +1114,26 @@ int BTM_SpawnWorldGlobal(BTM_World *wrl, BCCX_Node *ent)
 		wrl->daytimer=BCCX_GetIntCst(ent, &bccx_time, "time");
 		wrl->day=BCCX_GetIntCst(ent, &bccx_day, "day");
 
+		na=BCCX_GetNodeChildCount(ent);
+		for(ci=0; ci<na; ci++)
+		{
+			tn1=BCCX_GetNodeIndex(ent, ci);
+			BTM_SpawnWorldGlobal(wrl, tn1);
+		}
+
 		return(0);
+	}
+
+	if(BCCX_TagIsCstP(ent, &bccx_inven, "inven"))
+	{
+		ix=BCCX_GetIntCst(ent, &bccx_index, "index");
+		cn=BCCX_GetIntCst(ent, &bccx_count, "count");
+		it=BCCX_GetIntCst(ent, &bccx_item, "item");
+		
+		if(cn>0)
+			{ wrl->cam_inven[ix]=it|((cn-1)<<16); }
+		else
+			{ wrl->cam_inven[ix]=0; }
 	}
 
 	return(-1);
@@ -883,6 +1181,7 @@ BCCX_Node *BTM_FlattenWorldGlobalState(BTM_World *wrl)
 		BCCX_SetFloatCst(ntmp, &bccx_org_z, "org_z", vz*(1.0/256));
 		BCCX_SetIntCst(ntmp, &bccx_yaw, "yaw", wrl->cam_yaw);
 		BCCX_SetIntCst(ntmp, &bccx_pitch, "pitch", wrl->cam_pitch);
+		BCCX_SetIntCst(ntmp, &bccx_flags, "flags", wrl->cam_flags);
 
 		BCCX_SetIntCst(ntmp, &bccx_time, "time", wrl->daytimer);
 		BCCX_SetIntCst(ntmp, &bccx_day, "day", wrl->day);
@@ -990,12 +1289,17 @@ int BTMGL_DrawWorldEntities(BTM_World *wrl)
 {
 	BTM_Region *rgn;
 	BTM_MobEntity *mob;
+	BTM_MobSprite	*oldspr, *curspr, *nxtspr;
 	BCCX_Node	*ntmp;
 	u64 rpos;
 	int cx, cy, vx, vy, dx, dy, d;
 
+	BTMGL_LockWorld();
+
 	vx=(wrl->cam_org>> 8)&0xFFFF;
 	vy=(wrl->cam_org>>32)&0xFFFF;
+
+	btm_buildsprites=NULL;
 
 	rgn=wrl->region;
 	while(rgn)
@@ -1068,6 +1372,24 @@ int BTMGL_DrawWorldEntities(BTM_World *wrl)
 //		BTM_BlockTickRegion(wrl, rgn);
 		rgn=rgn->next;
 	}
+
+	BTM_LockSprites();
+
+	oldspr=btm_vissprites;
+	btm_vissprites=btm_buildsprites;
+	btm_buildsprites=NULL;
+
+	curspr=oldspr;
+	while(curspr)
+	{
+		nxtspr=curspr->next;
+		BTM_FreeSprite(curspr);
+		curspr=nxtspr;
+	}
+
+	BTM_UnlockSprites();
+
+	BTMGL_UnlockWorld();
 
 	return(0);
 }
@@ -1329,6 +1651,16 @@ BTM_MobEntity *BTM_QueryWorldEntityForRay(
 int BTM_EventPlayerUseMob(
 	BTM_World *wrl, BTM_MobEntity *mob)
 {
+	int i, j;
+
+	wrl->tgen_varstk_pos=0;	
+	for(i=0; i<mob->mobvar_cnt; i++)
+	{
+		j=wrl->tgen_varstk_pos++;
+		wrl->tgen_varstk_name[j]=mob->mobvar_name[i];
+		wrl->tgen_varstk_val[j]=mob->mobvar_val[i];
+	}
+
 	if(!strcmp(mob->cname, "pig"))
 		BTM_ShowMenu("main", "use_pig");
 	if(!strcmp(mob->cname, "cow"))

@@ -625,30 +625,30 @@ int BTM_DrawConsole()
 
 	BTM_DrawCharPrim(0, 0, 0, 0, 0, 0, 0);
 
-//	tkra_glEnable(GL_BLEND);
-//	tkra_glDisable(GL_ALPHA_TEST);
+//	pglEnable(GL_BLEND);
+//	pglDisable(GL_ALPHA_TEST);
 
 	f0=(9.0/16.0)+(1.0/256.0);
 	f1=(10.0/16.0)-(1.0/256.0);
 	f2=(3.0/16.0)+(1.0/256.0);
 	f3=(4.0/16.0)-(1.0/256.0);
 
-	tkra_glColor4f(0.2, 0.2, 0.2, 0.75);
-	tkra_glBindTexture(GL_TEXTURE_2D, 2);
-	tkra_glBegin(GL_QUADS);
-	tkra_glTexCoord2f(f0, f2);
-	tkra_glVertex3f(-160, 100, 10);
-	tkra_glTexCoord2f(f0, f3);
-	tkra_glVertex3f(-160, -100, 10);
-	tkra_glTexCoord2f(f1, f3);
-	tkra_glVertex3f(160, -100, 10);
-	tkra_glTexCoord2f(f1, f2);
-	tkra_glVertex3f(160, 100, 10);
+	pglColor4f(0.2, 0.2, 0.2, 0.75);
+	pglBindTexture(GL_TEXTURE_2D, 2);
+	pglBegin(GL_QUADS);
+	pglTexCoord2f(f0, f2);
+	pglVertex3f(-160, 100, 10);
+	pglTexCoord2f(f0, f3);
+	pglVertex3f(-160, -100, 10);
+	pglTexCoord2f(f1, f3);
+	pglVertex3f(160, -100, 10);
+	pglTexCoord2f(f1, f2);
+	pglVertex3f(160, 100, 10);
 
-	tkra_glEnd();
+	pglEnd();
 
-	tkra_glDisable(GL_BLEND);
-	tkra_glEnable(GL_ALPHA_TEST);
+	pglDisable(GL_BLEND);
+	pglEnable(GL_ALPHA_TEST);
 
 	for(i=0; i<25; i++)
 		for(j=0; j<40; j++)

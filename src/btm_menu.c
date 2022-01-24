@@ -28,10 +28,13 @@ BTM_Menu *btm_showmenu;
 int btm_menu_selitem;
 int btm_menu_selchars;
 int btm_menu_selchardt;
+BTM_World *btm_wrl;
 
 int			btm_texfont_rov=0;
 int			btm_texfont_8px;
 int			btm_texfont_16px;
+int			btm_texfont_tinycnt;
+int			btm_texfont_inven;
 
 int			btm_texfont_curi;
 
@@ -47,20 +50,36 @@ int BTM_MenuInit()
 	
 	btm_texfont_rov=16;
 	
-	buf=BTM_LoadFile("gfx/fixed_8px.dds", &sz);
+	buf=BTM_LoadFileTmp("gfx/fixed_8px.dds", &sz);
 	if(buf)
 	{
 		btm_texfont_8px=btm_texfont_rov++;
-		tkra_glBindTexture(TKRA_TEXTURE_2D, btm_texfont_8px);
-		BTMGL_UploadCompressed(buf, 0, 1);
+		pglBindTexture(TKRA_TEXTURE_2D, btm_texfont_8px);
+		BTMGL_UploadCompressed(buf, 0, 3);
 	}
 
-	buf=BTM_LoadFile("gfx/fixed_16px.dds", &sz);
+	buf=BTM_LoadFileTmp("gfx/fixed_16px.dds", &sz);
 	if(buf)
 	{
 		btm_texfont_16px=btm_texfont_rov++;
-		tkra_glBindTexture(TKRA_TEXTURE_2D, btm_texfont_16px);
-		BTMGL_UploadCompressed(buf, 0, 1);
+		pglBindTexture(TKRA_TEXTURE_2D, btm_texfont_16px);
+		BTMGL_UploadCompressed(buf, 0, 3);
+	}
+
+	buf=BTM_LoadFileTmp("gfx/tinycnt0.dds", &sz);
+	if(buf)
+	{
+		btm_texfont_tinycnt=btm_texfont_rov++;
+		pglBindTexture(TKRA_TEXTURE_2D, btm_texfont_tinycnt);
+		BTMGL_UploadCompressed(buf, 0, 3);
+	}
+	
+	buf=BTM_LoadFileTmp("gfx/invgrid0.dds", &sz);
+	if(buf)
+	{
+		btm_texfont_inven=btm_texfont_rov++;
+		pglBindTexture(TKRA_TEXTURE_2D, btm_texfont_inven);
+		BTMGL_UploadCompressed(buf, 0, 3);
 	}
 	
 	btm_texfont_curi=0;
@@ -78,7 +97,7 @@ int BTM_DrawCharPrim(int x, int y, int xs, int ys,
 	{
 		if(btm_texfont_curi)
 		{
-			tkra_glEnd();
+			pglEnd();
 			btm_texfont_curi=0;
 		}
 		
@@ -95,29 +114,36 @@ int BTM_DrawCharPrim(int x, int y, int xs, int ys,
 	s0=j*(1.0/16.0); s1=s0+(1.0/16.0);
 //	t0=i*(1.0/16.0); t1=t0+(1.0/16.0);
 //	t1=i*(1.0/16.0)+(2/256.0); t0=t1+(1.0/16.0);
-	t1=i*(1.0/16.0)+(2/256.0);
-	t0=t1+(1.0/16.0)+(3/256.0);
 
-	tkra_glColor4ubv((void *)(&clr));
+//	t1=i*(1.0/16.0)+(2/256.0);
+//	t0=t1+(1.0/16.0)+(3/256.0);
+
+//	t1=i*(1.0/16.0)+(1/128.0);
+//	t0=t1+(1.0/16.0)+(1.0/128);
+
+	t1=i*(1.0/16.0);
+	t0=t1+(1.0/16.0);
+
+	pglColor4ubv((void *)(&clr));
 
 	if(btm_texfont_curi<=0)
 	{
-		tkra_glBindTexture(TKRA_TEXTURE_2D, tex);
+		pglBindTexture(TKRA_TEXTURE_2D, tex);
 		btm_texfont_curi=tex;
 
-		tkra_glBegin(GL_QUADS);
+		pglBegin(GL_QUADS);
 	}
 
-//	tkra_glBegin(GL_QUADS);
-	tkra_glTexCoord2f(s0, t0);
-	tkra_glVertex2f(x0, y0);
-	tkra_glTexCoord2f(s0, t1);
-	tkra_glVertex2f(x0, y1);
-	tkra_glTexCoord2f(s1, t1);
-	tkra_glVertex2f(x1, y1);
-	tkra_glTexCoord2f(s1, t0);
-	tkra_glVertex2f(x1, y0);
-//	tkra_glEnd();
+//	pglBegin(GL_QUADS);
+	pglTexCoord2f(s0, t0);
+	pglVertex2f(x0, y0);
+	pglTexCoord2f(s0, t1);
+	pglVertex2f(x0, y1);
+	pglTexCoord2f(s1, t1);
+	pglVertex2f(x1, y1);
+	pglTexCoord2f(s1, t0);
+	pglVertex2f(x1, y0);
+//	pglEnd();
 
 	return(0);
 }
@@ -184,6 +210,114 @@ int BTM_DrawString8pxLen(int x, int y, char *str, u32 clr, int len)
 	return(BTM_DrawStringPrim(x, y, 8, 8, tb, btm_texfont_8px, clr));
 }
 
+char *BTM_MenuCheckInterpolateText(BTM_World *wrl, char *text)
+{
+	char tb[4096], tn[64];
+	char *s, *t, *t1, *s1;
+	
+	if(!text)
+		return(text);
+	
+	s=text;
+	while(*s)
+	{
+		if(*s=='$')
+			break;
+		s++;
+	}
+	
+	if(!(*s))
+		return(text);
+
+	s=text; t=tb;
+	while(*s)
+	{
+		if(s[0]=='$')
+		{
+			if(s[1]=='$')
+			{
+				*t++='$';
+				s+=2;
+				continue;
+			}
+			
+			s++;
+			t1=tn;
+			while(*s)
+			{
+				if(		((*s>='a') && (*s<='z')) ||
+						((*s>='A') && (*s<='Z')) ||
+						((*s>='0') && (*s<='9')) ||
+						(*s=='_'))
+					{ *t1++=*s++; continue; }
+				break;
+			}
+			*t1++=0;
+			
+			s1=BTM_InstGetVarStr(wrl, tn);
+			if(s1)
+			{
+				while(*s1)
+					{ *t++=*s1++; }
+			}
+			continue;
+		}
+		
+		*t++=*s++;
+	}
+
+	return(bccx_strdup(tb));
+}
+
+char *BTM_MenuGetNodeAttrStr(BCCX_Node *node, char *name)
+{
+	char *str, *s1;
+//	str=BTM_InstGetNodeAttrStr(btm_wrl, node, name);
+//	str=BTM_MenuCheckInterpolateText(btm_wrl, str);
+	
+	str=BCCX_Get(node, name);
+	
+	if(!str)
+		return(NULL);
+
+	if(str && (*str=='$'))
+	{
+		s1=str+1;
+		while(*s1)
+		{
+			if(		((*s1>='a') && (*s1<='z')) ||
+					((*s1>='A') && (*s1<='Z')) ||
+					((*s1>='0') && (*s1<='9')) ||
+					(*s1=='_'))
+				{ s1++; continue; }
+			break;
+		}
+	
+		if(!(*s1))
+		{
+			return(BTM_InstGetVarStr(btm_wrl, str+1));
+		}
+	}
+
+	str=BTM_MenuCheckInterpolateText(btm_wrl, str);
+	return(str);
+}
+
+s64 BTM_MenuGetNodeAttrInt(BCCX_Node *node, char *name)
+{
+	char *str;
+	s64 li;
+	
+	li=BCCX_GetInt(node, name);
+	if(li!=0)
+		return(li);
+
+	str=BCCX_Get(node, name);
+	if(str && (*str=='$'))
+		return(BTM_InstGetVarInt(btm_wrl, str+1));
+	
+	return(0);
+}
 
 int BTM_LoadMenu(char *fname)
 {
@@ -286,7 +420,8 @@ int BTM_ShowMenu(char *name, char *subname)
 		}
 	}else
 	{
-		subname=BCCX_Get(mcur->root, "root");
+//		subname=BCCX_Get(mcur->root, "root");
+		subname=BTM_MenuGetNodeAttrStr(mcur->root, "root");
 
 		ncur=BCCX_FindAttr(mcur->root, "name", subname);
 		mcur->cur_node=ncur;
@@ -332,7 +467,8 @@ BCCX_Node *BTM_LookupMenuNode(char *name, char *subname)
 		return(ncur);
 	}else
 	{
-		subname=BCCX_Get(mcur->root, "root");
+//		subname=BCCX_Get(mcur->root, "root");
+		subname=BTM_MenuGetNodeAttrStr(mcur->root, "root");
 		ncur=BCCX_FindAttr(mcur->root, "name", subname);
 		return(ncur);
 	}
@@ -362,7 +498,8 @@ int BTM_DrawMenu()
 
 	if(BCCX_TagIsP(mcur, "menu"))
 	{
-		s0=BCCX_Get(mcur, "title");
+//		s0=BCCX_Get(mcur, "title");
+		s0=BTM_MenuGetNodeAttrStr(mcur, "title");
 		
 		if(s0)
 		{
@@ -379,11 +516,13 @@ int BTM_DrawMenu()
 			if(BCCX_TagIsP(c, "option"))
 			{
 				scvv=NULL;
-				scvn=BCCX_Get(c, "cvar");
+//				scvn=BCCX_Get(c, "cvar");
+				scvn=BTM_MenuGetNodeAttrStr(c, "cvar");
 				if(scvn)
 					scvv=BTM_CvarGetStrUI(scvn);
 			
-				s1=BCCX_Get(c, "text");
+//				s1=BCCX_Get(c, "text");
+				s1=BTM_MenuGetNodeAttrStr(c, "text");
 				if(s1)
 				{
 					l=strlen(s1);
@@ -436,8 +575,10 @@ int BTM_DrawMenu()
 //								{ BTM_CvarSetStr(scvn, "true"); }
 						}
 					
-						s1=BCCX_Get(c, "goname");
-						s2=BCCX_Get(c, "gosubname");
+//						s1=BCCX_Get(c, "goname");
+						s1=BTM_MenuGetNodeAttrStr(c, "goname");
+//						s2=BCCX_Get(c, "gosubname");
+						s2=BTM_MenuGetNodeAttrStr(c, "gosubname");
 
 						if(s1)
 						{
@@ -492,28 +633,32 @@ int BTM_DrawMenu()
 		f2=(3.0/16.0)+(1.0/256.0);
 		f3=(4.0/16.0)-(1.0/256.0);
 
-		tkra_glColor4f(1.0, 1.0, 1.0, 1.0);
-		tkra_glBindTexture(GL_TEXTURE_2D, 2);
-		tkra_glBegin(GL_QUADS);
-		tkra_glTexCoord2f(f0, f2);
-		tkra_glVertex2f(-140, 88);
-		tkra_glTexCoord2f(f0, f3);
-		tkra_glVertex2f(-140, -88);
-		tkra_glTexCoord2f(f1, f3);
-		tkra_glVertex2f(140, -88);
-		tkra_glTexCoord2f(f1, f2);
-		tkra_glVertex2f(140, 88);
+		pglColor4f(1.0, 1.0, 1.0, 1.0);
+		pglBindTexture(GL_TEXTURE_2D, 2);
+		pglBegin(GL_QUADS);
+		pglTexCoord2f(f0, f2);
+		pglVertex2f(-140, 88);
+		pglTexCoord2f(f0, f3);
+		pglVertex2f(-140, -88);
+		pglTexCoord2f(f1, f3);
+		pglVertex2f(140, -88);
+		pglTexCoord2f(f1, f2);
+		pglVertex2f(140, 88);
 
-		tkra_glEnd();
+		pglEnd();
 
 		c=BCCX_Fetch(mcur, "text");
 		if(c)
 		{
 			s0=BCCX_Text(c);
+			s0=BTM_MenuCheckInterpolateText(btm_wrl, s0);
 		}
 	
 		if(!s0)
-			s0=BCCX_Get(mcur, "text");
+		{
+//			s0=BCCX_Get(mcur, "text");
+			s0=BTM_MenuGetNodeAttrStr(mcur, "text");
+		}
 
 		nface=NULL;
 
@@ -521,11 +666,13 @@ int BTM_DrawMenu()
 		if(s1)
 			nface=BCCX_FindAttr(btm_showmenu->root, "name", s1);
 		
-		fibase=BCCX_GetInt(mcur, "face_idx");
+//		fibase=BCCX_GetInt(mcur, "face_idx");
+		fibase=BTM_MenuGetNodeAttrInt(mcur, "face_idx");
 		
 		if(nface)
 		{
-			s2=BCCX_Get(nface, "image");
+//			s2=BCCX_Get(nface, "image");
+			s2=BTM_MenuGetNodeAttrStr(nface, "image");
 			tex=BTMGL_LoadSpriteForName(s2, 0, 0);
 
 			i=(btm_menu_selchardt>50) && (btm_menu_selchars<strlen(s0));
@@ -538,19 +685,19 @@ int BTM_DrawMenu()
 			f2=(k+0)*(1.0/4.0)+(1.0/256.0);
 			f3=(k+1)*(1.0/4.0)-(1.0/256.0);
 
-			tkra_glColor4f(1.0, 1.0, 1.0, 1.0);
-			tkra_glBindTexture(GL_TEXTURE_2D, tex);
-			tkra_glBegin(GL_QUADS);
-			tkra_glTexCoord2f(f0, f2);
-			tkra_glVertex2f(-132, 80);
-			tkra_glTexCoord2f(f0, f3);
-			tkra_glVertex2f(-132, 48);
-			tkra_glTexCoord2f(f1, f3);
-			tkra_glVertex2f(-100, 48);
-			tkra_glTexCoord2f(f1, f2);
-			tkra_glVertex2f(-100, 80);
+			pglColor4f(1.0, 1.0, 1.0, 1.0);
+			pglBindTexture(GL_TEXTURE_2D, tex);
+			pglBegin(GL_QUADS);
+			pglTexCoord2f(f0, f2);
+			pglVertex2f(-132, 80);
+			pglTexCoord2f(f0, f3);
+			pglVertex2f(-132, 48);
+			pglTexCoord2f(f1, f3);
+			pglVertex2f(-100, 48);
+			pglTexCoord2f(f1, f2);
+			pglVertex2f(-100, 80);
 
-			tkra_glEnd();
+			pglEnd();
 		}
 		
 		if(s0)
@@ -575,7 +722,8 @@ int BTM_DrawMenu()
 
 			if(BCCX_TagIsP(c, "option"))
 			{
-				s1=BCCX_Get(c, "text");
+//				s1=BCCX_Get(c, "text");
+				s1=BTM_MenuGetNodeAttrStr(c, "text");
 				if(s1)
 				{
 					l=strlen(s1);
@@ -591,8 +739,10 @@ int BTM_DrawMenu()
 						!I_KeyDownL(K_ENTER) &&
 						!btm_menu_inhibit)
 					{
-						s1=BCCX_Get(c, "goname");
-						s2=BCCX_Get(c, "gosubname");
+//						s1=BCCX_Get(c, "goname");
+						s1=BTM_MenuGetNodeAttrStr(c, "goname");
+//						s2=BCCX_Get(c, "gosubname");
+						s2=BTM_MenuGetNodeAttrStr(c, "gosubname");
 
 						if(s1)
 						{

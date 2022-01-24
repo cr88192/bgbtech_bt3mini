@@ -217,13 +217,23 @@ typedef struct BTM_Screen_s BTM_Screen;
 typedef struct BTM_TexImg_s BTM_TexImg;
 
 typedef struct BTM_MobEntity_s BTM_MobEntity;
+typedef struct BTM_MobSprite_s BTM_MobSprite;
 
+// #define	BTM_RAYCAST_MAXHITS		16384
+// #define	BTM_RAYCAST_MAXHITS		32768
+// #define	BTM_RAYCAST_MAXHITS		65536
+// #define	BTM_RAYCAST_MAXHITS			131072
+#define	BTM_RAYCAST_MAXHITS			262144
+// #define	BTM_RAYCAST_HASHSZ			1024
+#define	BTM_RAYCAST_HASHSZ			4096
 
 struct BTM_World_s {
 // u32		*vox;
 // byte	xsh;
 // byte	zsh;
 // u64		*voxbm;		//solid bitmap
+
+u32	magic1;
 
 byte *tg_nmap[16];
 u64 tg_baseseed;
@@ -234,26 +244,33 @@ BTM_Region	*free_region;
 
 BTM_Region	*rgn_luhash[64];
 
+u32	magic2;
+
 BTM_MobEntity	*free_mobent;
 
 void	*mm_p2alloc[20];
 
+u32	magic3;
+
 byte	cam_yaw;
 sbyte	cam_pitch;
 u64		cam_org;
+u64		cam_flags;
 
 float	cam_fw[3];
 float	cam_rt[3];
 float	cam_up[3];
 
-u64		scr_pts_list[16384];	//results 2 (merged)
-int		scr_pts_hit[16384];			//raycast hit results
-short	scr_pts_chn[16384];		//chain
-byte	scr_pts_rcnt[16384];	//recency count
-short	scr_pts_hash[64];		//hash
+u64		scr_pts_list[BTM_RAYCAST_MAXHITS];		//results 2 (merged)
+u32		magic4;
+int		scr_pts_hit[BTM_RAYCAST_MAXHITS];		//raycast hit results
+int		scr_pts_chn[BTM_RAYCAST_MAXHITS];		//chain
+byte	scr_pts_rcnt[BTM_RAYCAST_MAXHITS];		//recency count
+int		scr_pts_hash[BTM_RAYCAST_HASHSZ];		//hash
+u32		magic5;
 int		scr_npts;
 
-u64		scr_cxpred[64];			//cix predictor 2
+u64		scr_cxpred[BTM_RAYCAST_HASHSZ];			//cix predictor 2
 u64		scr_hpred;				//hit prediction
 
 u64		scr_lhit;				//last hit
@@ -292,6 +309,8 @@ u16		tgen_vargbl_name[512];
 u64		tgen_vargbl_val[512];
 int		tgen_vargbl_cnt;
 
+u32		cam_inven[6*8];
+
 };
 
 struct BTM_Screen_s {
@@ -308,20 +327,25 @@ btmra_rastpixel		*rgb;		//rgb planes
 int					sz_lsh;		//size, left-shift
 };
 
+#define		BTM_MAGIC1	0x12345678
+
 struct BTM_Region_s {
+u32			magic1;
 BTM_Region	*next;
 BTM_Region	*unext;
 // u32			*vox;
 u32			*voxa[512];		//raw voxel values
 byte		*voxb[512];		//voxel byte index
 byte		*voxh[512];		//voxel half-byte index
+u32			magic4;
 u32			voxu[512];		//block-type (if n==1)
 byte		vox_n[512];		//number of assigned indices
 byte		vox_m[512];		//max allocated indices (log2)
 u32			chk_fl[512];	//per chunk flags
 u32			chk_ofsz[768];	//per chunk offset/size
-
+u32			magic2;
 u16			voxbmix[512];	//voxel bitmap, index
+u32			magic3;
 u64			*voxbm;			//voxel bitmap, bits
 
 int			rgnix;
@@ -342,6 +366,7 @@ BCCX_Node		*static_ent_tree;
 BTM_MobEntity	*live_entity;
 
 BTM_MobEntity	*live_entity_hash[256];		//hash for block position
+u32			magic5;
 };
 
 struct BTM_MobEntity_s {
@@ -387,10 +412,41 @@ int				spr_frame;
 int				mob_rtick;
 int				mob_mvtick;
 
+u16				mobvar_name[32];
+u64				mobvar_val[32];
+int				mobvar_cnt;
+
 BTM_World		*wrl;
 BTM_Region		*rgn;
 int				(*Tick)(BTM_World *wrl, BTM_MobEntity *self);
 int				(*Draw)(BTM_World *wrl, BTM_MobEntity *self);
+};
+
+
+struct BTM_MobSprite_s {
+BTM_MobSprite	*next;
+int				org_x;		//16.8
+int				org_y;		//16.8
+int				org_z;		//8.8
+byte			yaw;		//yaw angle
+byte			pitch;		//pitch angle (if relevant)
+
+// int				orgl_x;		//16.8
+// int				orgl_y;		//16.8
+// int				orgl_z;		//8.8
+
+// byte			rad_x;
+// byte			rad_z;
+// byte			rad_ofs_z;
+
+u32				spr_rgb;
+
+float			spr_dxs;	//sprite width
+float			spr_dzs;	//sprite height
+
+char			*spr_base;
+int				spr_seq;
+int				spr_frame;
 };
 
 #define		btm_malloc(sz)	btm_malloc_lln(sz, __FILE__, __LINE__)

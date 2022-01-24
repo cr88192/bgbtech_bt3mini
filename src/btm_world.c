@@ -178,19 +178,46 @@ int BTM_RaycastInitTables()
 }
 
 int btm_stat_malloc_tot;
+void * volatile btm_malloc_mutex;
+
+int BTM_LockMalloc()
+{
+	if(!btm_malloc_mutex)
+		btm_malloc_mutex=thMutex();
+	thLockMutex(btm_malloc_mutex);
+	return(0);
+}
+
+int BTM_UnlockMalloc()
+{
+	thUnlockMutex(btm_malloc_mutex);
+	return(0);
+}
+
 
 void *btm_malloc_lln(int sz, char *lfn, int lln)
 {
+	void *ptr;
+
+	BTM_LockMalloc();
 	printf("malloc: %d %s:%d tot=%d\n", sz, lfn, lln, btm_stat_malloc_tot);
 	btm_stat_malloc_tot+=sz;
+	ptr=malloc(sz);
+	BTM_UnlockMalloc();
 
-	return(malloc(sz));
+	return(ptr);
 }
 
 void *btm_realloc_lln(void *ptr, int sz, char *lfn, int lln)
 {
+	void *ptr1;
+
+	BTM_LockMalloc();
 	printf("realloc: %d %s:%d\n", sz, lfn, lln);
-	return(realloc(ptr, sz));
+	ptr1=realloc(ptr, sz);
+	BTM_UnlockMalloc();
+
+	return(ptr1);
 }
 
 u64 BTM_RaycastStepVectorB(int yang, int pang)
@@ -463,7 +490,7 @@ int BTM_HashForBlkPos(u64 bpos)
 	return(h);
 }
 
-int btm_stat_szallocsq[24];
+volatile int btm_stat_szallocsq[24];
 
 void *BTM_WorldAllocSq(BTM_World *wrl, int pidx)
 {
@@ -473,11 +500,13 @@ void *BTM_WorldAllocSq(BTM_World *wrl, int pidx)
 
 	if(pidx<4)
 		pidx=4;
-	
+
+	BTM_LockAlloc();
 	ptr=wrl->mm_p2alloc[pidx];
 	if(ptr)
 	{
 		wrl->mm_p2alloc[pidx]=*(void **)ptr;
+		BTM_UnlockAlloc();
 		return(ptr);
 	}
 	
@@ -485,6 +514,7 @@ void *BTM_WorldAllocSq(BTM_World *wrl, int pidx)
 	{
 		ptr=btm_malloc(1<<pidx);
 		btm_stat_szallocsq[pidx]+=1<<pidx;
+		BTM_UnlockAlloc();
 		return(ptr);
 	}
 
@@ -503,13 +533,16 @@ void *BTM_WorldAllocSq(BTM_World *wrl, int pidx)
 	
 	ptr=wrl->mm_p2alloc[pidx];
 	wrl->mm_p2alloc[pidx]=*(void **)ptr;
+	BTM_UnlockAlloc();
 	return(ptr);
 }
 
 int BTM_WorldFreeSq(BTM_World *wrl, void *ptr, int pidx)
 {
+	BTM_LockAlloc();
 	*(void **)ptr=wrl->mm_p2alloc[pidx];
 	wrl->mm_p2alloc[pidx]=ptr;
+	BTM_UnlockAlloc();
 	return(0);
 }
 
@@ -863,6 +896,21 @@ u32 BTM_GetWorldBlockXYZ(BTM_World *wrl,
 	return(BTM_GetWorldBlockCix(wrl, rcix));
 }
 
+u32 BTM_TryGetWorldBlockXYZ(BTM_World *wrl,
+	int cx, int cy, int cz)
+{
+	u64 rcix;
+	int cix, rix, rx, ry;
+
+	if(cz<0)
+		return(0);
+	if(cz>=128)
+		return(0);
+
+	rcix=BTM_BlockCoordsToRcix(cx, cy, cz);	
+	return(BTM_TryGetWorldBlockCix(wrl, rcix));
+}
+
 u32 BTM_GetWorldBlockCorg(BTM_World *wrl, u64 corg)
 {
 	int cx, cy, cz;
@@ -872,6 +920,18 @@ u32 BTM_GetWorldBlockCorg(BTM_World *wrl, u64 corg)
 	cy=(corg>>32)&65535;
 	cz=(corg>>56)&255;
 	v=BTM_GetWorldBlockXYZ(wrl, cx, cy, cz);
+	return(v);
+}
+
+u32 BTM_TryGetWorldBlockCorg(BTM_World *wrl, u64 corg)
+{
+	int cx, cy, cz;
+	u32 v;
+	
+	cx=(corg>> 8)&65535;
+	cy=(corg>>32)&65535;
+	cz=(corg>>56)&255;
+	v=BTM_TryGetWorldBlockXYZ(wrl, cx, cy, cz);
 	return(v);
 }
 
@@ -921,7 +981,27 @@ BTM_World *BTM_AllocWorld(int xsh, int zsh)
 	}
 #endif
 	
+	tmp->magic1=BTM_MAGIC1;
+	tmp->magic2=BTM_MAGIC1;
+	tmp->magic3=BTM_MAGIC1;
+	tmp->magic4=BTM_MAGIC1;
+	tmp->magic5=BTM_MAGIC1;
+//	tmp->magic1=BTM_MAGIC1;
+	
 	return(tmp);
+}
+
+int BTM_CheckWorldMagic(BTM_World *wrl)
+{
+	if(	(wrl->magic1!=BTM_MAGIC1) ||
+		(wrl->magic2!=BTM_MAGIC1) ||
+		(wrl->magic3!=BTM_MAGIC1) ||
+		(wrl->magic4!=BTM_MAGIC1) ||
+		(wrl->magic5!=BTM_MAGIC1)	)
+	{
+		debug_break
+	}
+	return(0);
 }
 
 int BTM_GetWorldTimeHhMm(BTM_World *wrl)
@@ -1003,11 +1083,56 @@ static const int  btmgl_cube_quads[6*4]=
 #endif
 
 
+void *btmgl_array_mutex;
+void *btmgl_world_mutex;
+
 float *btmgl_blkemit_xyz;
 float *btmgl_blkemit_st;
 u32 *btmgl_blkemit_rgb;
 int btmgl_blkemit_npts;
 int btmgl_blkemit_mpts;
+
+float *btmgl_blkemit2_xyz;
+float *btmgl_blkemit2_st;
+u32 *btmgl_blkemit2_rgb;
+int btmgl_blkemit2_npts;
+
+int BTMGL_EmitLockArrays()
+{
+#ifdef BTM_RAYTHREAD
+	if(!btmgl_array_mutex)
+		btmgl_array_mutex=thMutex();
+	thLockMutex(btmgl_array_mutex);
+#endif
+	return(0);
+}
+
+int BTMGL_EmitUnlockArrays()
+{
+#ifdef BTM_RAYTHREAD
+	thUnlockMutex(btmgl_array_mutex);
+#endif
+	return(0);
+}
+
+int BTMGL_LockWorld()
+{
+#ifdef BTM_RAYTHREAD
+	if(!btmgl_world_mutex)
+		btmgl_world_mutex=thMutex();
+	thLockMutex(btmgl_world_mutex);
+#endif
+	return(0);
+}
+
+int BTMGL_UnlockWorld()
+{
+#ifdef BTM_RAYTHREAD
+	thUnlockMutex(btmgl_world_mutex);
+#endif
+	return(0);
+}
+
 
 int BTMGL_EmitBlockVertex(float *xyz, float *st, u32 rgb)
 {
@@ -1016,28 +1141,82 @@ int BTMGL_EmitBlockVertex(float *xyz, float *st, u32 rgb)
 	
 	if(!btmgl_blkemit_xyz)
 	{
+#ifdef BTM_RAYTHREAD
+		if(!btmgl_array_mutex)
+		{
+			btmgl_array_mutex=thMutex();
+			btmgl_world_mutex=thMutex();
+		}
+#endif
+	
+		BTMGL_EmitLockArrays();
+
+//		k=(btm_drawdist*btm_drawdist)*12;
+//		k=(btm_drawdist*btm_drawdist)*14;
+//		k=(btm_drawdist*btm_drawdist)*16;
+		k=(btm_drawdist*btm_drawdist)*18;
+		
+		ix=4096;
+		while(ix<k)
+			ix=ix<<1;
+
 //		ix=4096;
-		ix=1<<19;
+//		ix=1<<19;
+//		ix=1<<18;
 		btmgl_blkemit_xyz=btm_malloc(ix*4*sizeof(float));
 		btmgl_blkemit_st=btm_malloc(ix*2*sizeof(float));
 		btmgl_blkemit_rgb=btm_malloc(ix*1*sizeof(u32));
+
+#ifdef BTM_RAYTHREAD
+		btmgl_blkemit2_xyz=btm_malloc(ix*4*sizeof(float));
+		btmgl_blkemit2_st=btm_malloc(ix*2*sizeof(float));
+		btmgl_blkemit2_rgb=btm_malloc(ix*1*sizeof(u32));
+#else
+		btmgl_blkemit2_xyz=btmgl_blkemit_xyz;
+		btmgl_blkemit2_st=btmgl_blkemit_st;
+		btmgl_blkemit2_rgb=rgb;
+#endif
+
 		btmgl_blkemit_mpts=ix;
+
+		BTMGL_EmitUnlockArrays();
 	}
 	
 	if((btmgl_blkemit_npts+1)>=btmgl_blkemit_mpts)
 	{
+		BTMGL_EmitLockArrays();
+	
 		ix=btmgl_blkemit_mpts+(btmgl_blkemit_mpts>>1);
-		btmgl_blkemit_xyz=btm_realloc(btmgl_blkemit_xyz, ix*4*sizeof(float));
-		btmgl_blkemit_st=btm_realloc(btmgl_blkemit_st, ix*2*sizeof(float));
-		btmgl_blkemit_rgb=btm_realloc(btmgl_blkemit_rgb, ix*1*sizeof(u32));
+
+		btmgl_blkemit_xyz=btm_realloc(btmgl_blkemit_xyz,
+			ix*4*sizeof(float));
+		btmgl_blkemit_st=btm_realloc(btmgl_blkemit_st,
+			ix*2*sizeof(float));
+		btmgl_blkemit_rgb=btm_realloc(btmgl_blkemit_rgb,
+			ix*1*sizeof(u32));
+
+#ifdef BTM_RAYTHREAD
+		btmgl_blkemit2_xyz=btm_realloc(btmgl_blkemit2_xyz,
+			ix*4*sizeof(float));
+		btmgl_blkemit2_st=btm_realloc(btmgl_blkemit2_st,
+			ix*2*sizeof(float));
+		btmgl_blkemit2_rgb=btm_realloc(btmgl_blkemit2_rgb,
+			ix*1*sizeof(u32));
+#else
+		btmgl_blkemit2_xyz=btmgl_blkemit_xyz;
+		btmgl_blkemit2_st=btmgl_blkemit_st;
+		btmgl_blkemit2_rgb=rgb;
+#endif
+
 		btmgl_blkemit_mpts=ix;
+
+		BTMGL_EmitUnlockArrays();	
 	}
 	
 	ix=btmgl_blkemit_npts++;
 
 	memcpy(btmgl_blkemit_xyz+ix*4, xyz, 3*sizeof(float));
 	memcpy(btmgl_blkemit_st+ix*2, st, 2*sizeof(float));
-
 	btmgl_blkemit_rgb[ix]=rgb;
 	return(0);
 }
@@ -1447,7 +1626,9 @@ int BTMGL_DrawSceneBlocks(BTM_World *wrl)
 //	vox=wrl->vox;
 	
 //	xzshr=xsh+xsh;
-	
+
+	BTMGL_LockWorld();
+
 	cxfull=1<<(16-0);
 	cxhalf=1<<(16-1);
 	cxlqtr=1<<(16-2);
@@ -1493,7 +1674,10 @@ int BTMGL_DrawSceneBlocks(BTM_World *wrl)
 
 		if(rix!=rgix)
 		{
-			rgn=BTM_GetRegionForRix(wrl, rix);
+//			rgn=BTM_GetRegionForRix(wrl, rix);
+			rgn=BTM_LookupRegionForRix(wrl, rix);
+			if(!rgn)
+				continue;
 			rgix=rix;
 //			vox=rgn->vox;
 		}
@@ -1577,7 +1761,8 @@ int BTMGL_DrawSceneBlocks(BTM_World *wrl)
 				blk1=BTM_GetRegionBlockCix(wrl, rgn, cix1);
 			}else
 			{
-				blk1=BTM_GetWorldBlockCix(wrl, rcix1);
+//				blk1=BTM_GetWorldBlockCix(wrl, rcix1);
+				blk1=BTM_TryGetWorldBlockCix(wrl, rcix1);
 			}
 
 //			lbl|=((blk1>>12)&63LL)<<(j*8);
@@ -1603,16 +1788,49 @@ int BTMGL_DrawSceneBlocks(BTM_World *wrl)
 		}
 	}
 
-	if(btmgl_blkemit_npts<=0)
+	BTMGL_UnlockWorld();
+
+	BTMGL_EmitLockArrays();
+	
+#ifdef BTM_RAYTHREAD
+	memcpy(btmgl_blkemit2_xyz, btmgl_blkemit_xyz, btmgl_blkemit_npts*4*4);
+	memcpy(btmgl_blkemit2_st, btmgl_blkemit_st, btmgl_blkemit_npts*2*4);
+	memcpy(btmgl_blkemit2_rgb, btmgl_blkemit_rgb, btmgl_blkemit_npts*1*4);
+#endif
+
+	btmgl_blkemit2_npts=btmgl_blkemit_npts;
+
+	BTMGL_EmitUnlockArrays();
+
+	return(0);
+}
+
+int BTMGL_DrawSceneArrays(BTM_World *wrl)
+{
+	if(btmgl_blkemit2_npts<=0)
 		return(0);
 
-	tkra_glBindTexture(TKRA_TEXTURE_2D, 2);
+	BTMGL_EmitLockArrays();
 
-	tkra_glVertexPointer(3, TKRA_GL_FLOAT, 4*4, btmgl_blkemit_xyz+0);
-	tkra_glTexCoordPointer(2, TKRA_GL_FLOAT, 2*4, btmgl_blkemit_st+0);
-	tkra_glColorPointer(4, TKRA_GL_UNSIGNED_BYTE, 4, btmgl_blkemit_rgb+0);
-//	tkra_glDrawArrays(TKRA_GL_TRIANGLES, 0, btmgl_blkemit_npts);
-	tkra_glDrawArrays(TKRA_GL_QUADS, 0, btmgl_blkemit_npts);
+	pglBindTexture(TKRA_TEXTURE_2D, 2);
+
+	pglEnableClientState(GL_VERTEX_ARRAY);
+	pglEnableClientState(GL_TEXTURE_COORD_ARRAY);
+//	pglEnableClientState(GL_NORMAL_ARRAY);
+	pglEnableClientState(GL_COLOR_ARRAY);
+
+	pglVertexPointer(3, TKRA_GL_FLOAT, 4*4, btmgl_blkemit2_xyz+0);
+	pglTexCoordPointer(2, TKRA_GL_FLOAT, 2*4, btmgl_blkemit2_st+0);
+	pglColorPointer(4, TKRA_GL_UNSIGNED_BYTE, 4, btmgl_blkemit2_rgb+0);
+//	pglDrawArrays(TKRA_GL_TRIANGLES, 0, btmgl_blkemit_npts);
+	pglDrawArrays(TKRA_GL_QUADS, 0, btmgl_blkemit2_npts);
+
+	pglDisableClientState(GL_VERTEX_ARRAY);
+	pglDisableClientState(GL_TEXTURE_COORD_ARRAY);
+//	pglDisableClientState(GL_NORMAL_ARRAY);
+	pglDisableClientState(GL_COLOR_ARRAY);
+
+	BTMGL_EmitUnlockArrays();
 
 	return(0);
 }
@@ -1626,6 +1844,7 @@ void BTMGL_UploadCompressed (
 	BTMGL_DDS_HEADER *tdds;
 	byte *cs, *css;
 	int xs, ys;
+	int fmin, fmax;
 	int xshl, xshl1, isz, mip, txc;
 	int i, j, k;
 	
@@ -1648,9 +1867,18 @@ void BTMGL_UploadCompressed (
 
 //	txc=GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
 	txc=TKRA_GL_CMPR_RGBA_S3TC_DXT1;
-	if(!alpha)
+	if(!(alpha&1))
 //		txc=GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
 		txc=TKRA_GL_CMPR_RGB_S3TC_DXT1;
+
+	fmin=btmgl_filter_min;
+	fmax=btmgl_filter_max;
+	
+	if(alpha&2)
+	{
+		fmax=GL_NEAREST;
+	}
+	
 
 	cs=css; mip=0;
 	while(xshl>=0)
@@ -1663,7 +1891,7 @@ void BTMGL_UploadCompressed (
 			xshl1=0;
 	
 		isz=1<<(xshl1+xshl1+3);
-		tkra_glCompressedTexImage2D(
+		pglCompressedTexImage2D(
 			GL_TEXTURE_2D, mip, 
 			txc,
 			1<<xshl, 1<<xshl, 0, isz, cs);
@@ -1673,17 +1901,17 @@ void BTMGL_UploadCompressed (
 
 	if (mipmap)
 	{
-		tkra_glTexParameterf(GL_TEXTURE_2D,
-			GL_TEXTURE_MIN_FILTER, btmgl_filter_min);
-		tkra_glTexParameterf(GL_TEXTURE_2D,
-			GL_TEXTURE_MAG_FILTER, btmgl_filter_max);
+		pglTexParameterf(GL_TEXTURE_2D,
+			GL_TEXTURE_MIN_FILTER, fmin);
+		pglTexParameterf(GL_TEXTURE_2D,
+			GL_TEXTURE_MAG_FILTER, fmax);
 	}
 	else
 	{
-		tkra_glTexParameterf(GL_TEXTURE_2D,
-			GL_TEXTURE_MIN_FILTER, btmgl_filter_max);
-		tkra_glTexParameterf(GL_TEXTURE_2D,
-			GL_TEXTURE_MAG_FILTER, btmgl_filter_max);
+		pglTexParameterf(GL_TEXTURE_2D,
+			GL_TEXTURE_MIN_FILTER, fmax);
+		pglTexParameterf(GL_TEXTURE_2D,
+			GL_TEXTURE_MAG_FILTER, fmax);
 	}
 }
 

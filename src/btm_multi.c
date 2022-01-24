@@ -44,6 +44,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "cca_parse.c"
 #include "cca_abxe.c"
 
+#include "btm_thread.c"
+
+#include "btm_pgl.c"
+
 #include "btm_voxtype.c"
 
 // #include "btra_span.c"
@@ -61,6 +65,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "btm_tgen.c"
 #include "btm_light.c"
 #include "btm_mob.c"
+#include "btm_inven.c"
 
 #include "btm_wad4.c"
 

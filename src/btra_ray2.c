@@ -60,6 +60,8 @@ s32 *btmra_cosang;
 float *btmra_sinang_f;
 float *btmra_cosang_f;
 
+int btm_drawdist;
+
 int btmgl_time_ms;
 
 u64 btm_raycast_avgvec(u64 vec0, u64 vec1)
@@ -98,8 +100,8 @@ int BTM_RaycastTryAddHitCix1(BTM_World *wrl, u64 rcix, int nrcnt)
 	BTM_Region *rgn;
 	u64 blk;
 	u64 *lst;
-	short *chn;
-	short *hash;
+	int *chn;
+	int *hash;
 	byte *rcnt;
 	int msk, bt, fm, rix, cix;
 
@@ -114,12 +116,14 @@ int BTM_RaycastTryAddHitCix1(BTM_World *wrl, u64 rcix, int nrcnt)
 	blk=BTM_GetRegionBlockCix(wrl, rgn, cix);
 	bt=blk&0xFF;
 	fm=(blk>>24)&63;
-	if(bt<2)
+//	if(bt<2)
+	if(bt<4)
 		return(0);
 	if(fm==63)
 		return(0);
 
-	h=((rcix*(251*65521))>>24)&63;
+//	h=((rcix*(251*65521))>>24)&63;
+	h=((rcix*(251*65521))>>24)&(BTM_RAYCAST_HASHSZ-1);
 
 	if(nrcnt>30)
 	{
@@ -144,7 +148,7 @@ int BTM_RaycastTryAddHitCix1(BTM_World *wrl, u64 rcix, int nrcnt)
 		i=chn[i];
 	}
 	
-	if(wrl->scr_npts>=16383)
+	if(wrl->scr_npts>=(BTM_RAYCAST_MAXHITS-1))
 		return(0);
 	
 	i=wrl->scr_npts++;
@@ -165,6 +169,10 @@ int BTM_RaycastTryAddHitCix(BTM_World *wrl, u64 cix)
 
 //	to=33;
 	to=64;
+
+#ifdef _WIN32
+	to=255;
+#endif
 
 	i=BTM_RaycastTryAddHitCix1(wrl, cix, to);
 	i+=BTM_RaycastTryAddHitCix1(wrl, cix+1ULL, to);
@@ -641,6 +649,7 @@ int BTM_WorldCameraDistCix(BTM_World *wrl, u64 rcix)
 	dx=(signed char)(vx-cx);
 	dy=(signed char)(vy-cy);
 
+#ifndef BTM_RAYTHREAD
 	vq=(wrl->cam_yaw>>5)&7;
 	
 	switch(vq)
@@ -662,7 +671,7 @@ int BTM_WorldCameraDistCix(BTM_World *wrl, u64 rcix)
 			dx<<=3;
 		break;
 	}
-	
+#endif
 	
 	dx^=dx>>31;
 	dy^=dy>>31;
@@ -678,6 +687,11 @@ int BTM_WorldCameraDistCix(BTM_World *wrl, u64 rcix)
 int BTM_RaycastSceneQuad(BTM_World *wrl)
 {
 //	short	*
+	byte	jitter[16]={
+		0x00, 0xF8, 0x04, 0xFC,
+		0x02, 0xFA, 0x06, 0xFE,
+		0x01, 0xF9, 0x05, 0xFD,
+		0x03, 0xFB, 0x07, 0xFF};
 	u64		corg, corg1, step_fw;
 	u64		step0, step1, step2, step3;
 	u64		rcix;
@@ -689,7 +703,11 @@ int BTM_RaycastSceneQuad(BTM_World *wrl)
 
 	BTM_RaycastInitTables();
 
-	for(i=0; i<64; i++)
+	BTMGL_LockWorld();
+
+	BTM_CheckWorldMagic(wrl);
+
+	for(i=0; i<BTM_RAYCAST_HASHSZ; i++)
 	{
 		wrl->scr_pts_hash[i]=-1;
 		wrl->scr_cxpred[i]=-1;
@@ -707,8 +725,16 @@ int BTM_RaycastSceneQuad(BTM_World *wrl)
 		l=BTM_WorldCameraDistCix(wrl, rcix);
 //		if(l>36)
 //		if(l>96)
-		if(l>128)
+//		if(l>128)
+		if(l>(2*btm_drawdist))
 			continue;
+
+		if(l>btm_drawdist)
+		{
+			j-=3;
+			if(j<0)
+				continue;
+		}
 		
 		BTM_RaycastTryAddHitCix1(wrl, rcix, j-1);
 	}
@@ -736,8 +762,48 @@ int BTM_RaycastSceneQuad(BTM_World *wrl)
 //	yji=((wrl->frame>>3)&7)-3;
 //	yji=((wrl->frame>>3)&15)-7;
 
-	pji=((wrl->frame>>0)&15)-7;
-	yji=((wrl->frame>>1)&15)-7;
+//	pji=((wrl->frame>>0)&15)-7;
+//	pji=((wrl->frame>>3)&15)-7;
+//	yji=((wrl->frame>>1)&15)-7;
+
+	yji=(signed char)(jitter[(wrl->frame>>1)&15]);
+	pji=(signed char)(jitter[(wrl->frame>>3)&15]);
+
+#ifdef BTM_RAYTHREAD
+
+	corg1=corg;
+	corg1+=((u64)(btmra_sinang[btmgl_time_ms&255]>>23))<<48;
+
+	k=wrl->frame&1;
+	for(y=0; y<68; y++)
+//		for(x=0; x<256; x++)
+		for(x=0; x<128; x++)
+	{
+		if(y<4)
+		{
+			if((y==0) && (x!=0))
+				continue;
+			if(x&7)
+				continue;
+		}
+
+		if(y<8)
+		{
+			if(x&3)
+				continue;
+		}
+	
+//		y0_ang=x*4+yji;
+		y0_ang=x*8+yji;
+
+		p0_ang=256-(y*4)-pji;
+		if(k)p0_ang=-p0_ang;
+
+		step0=BTM_RaycastStepVectorB(y0_ang, p0_ang);
+		BTM_RaycastLineSingle(wrl, btm_drawdist, corg1, step0, 0);
+	}
+
+#else
 
 #if 1
 //	for(y=0; y<80; y++)
@@ -839,7 +905,8 @@ int BTM_RaycastSceneQuad(BTM_World *wrl)
 		corg1+=((u64)(btmra_sinang[btmgl_time_ms&255]>>23))<<48;
 
 //		BTM_RaycastLineSingle(wrl, 112, corg1, step0);
-		BTM_RaycastLineSingle(wrl, 80, corg1, step0, 0);
+//		BTM_RaycastLineSingle(wrl, 80, corg1, step0, 0);
+		BTM_RaycastLineSingle(wrl, btm_drawdist, corg1, step0, 0);
 //		BTM_RaycastLineSingle(wrl, 32, corg1, step0);
 //		BTM_RaycastLineSingle(wrl, 28, corg1, step0);
 //		BTM_RaycastLineSingle(wrl, 24, corg1, step0);
@@ -861,11 +928,11 @@ int BTM_RaycastSceneQuad(BTM_World *wrl)
 				continue;
 		}
 
-		if(y<8)
-		{
-			if(x&3)
-				continue;
-		}
+//		if(y<8)
+//		{
+//			if(x&3)
+//				continue;
+//		}
 	
 		y0_ang=x*32;
 //		p0_ang=-256+(y*12);
@@ -874,7 +941,8 @@ int BTM_RaycastSceneQuad(BTM_World *wrl)
 		if(k)p0_ang=-p0_ang;
 
 		step0=BTM_RaycastStepVectorB(y0_ang, p0_ang);
-		BTM_RaycastLineSingle(wrl, 32, corg1, step0, 0);
+//		BTM_RaycastLineSingle(wrl, 32, corg1, step0, 0);
+		BTM_RaycastLineSingle(wrl, btm_drawdist/2, corg1, step0, 0);
 
 //		p0_ang=256-(y*12);
 
@@ -882,12 +950,18 @@ int BTM_RaycastSceneQuad(BTM_World *wrl)
 //		BTM_RaycastLineSingle(wrl, 64, corg1, step0, 0);
 	}
 
+#endif
+
 	/* Raycast directly forwards. */
 	step0=BTM_RaycastStepVectorB(yaw*4, pitch*4);
 
 	BTM_RaycastLineSingle(wrl, 24,
 //	BTM_RaycastLineSingle(wrl, 96,
 		corg, step0, 1);
+
+	BTM_CheckWorldMagic(wrl);
+
+	BTMGL_UnlockWorld();
 	
 	return(0);
 }

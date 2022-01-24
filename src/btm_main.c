@@ -52,10 +52,21 @@ int I_SystemInit()
 	SoundDev_Init();
 	GfxDrv_Start();
 	
+#ifndef PGL_NATIVEGL
 	btesh2_gfxcon_fbxs=640;
 	btesh2_gfxcon_fbys=400;
 	
 	GfxDrv_PrepareFramebuf();
+#endif
+	return(0);
+}
+
+int I_BeginFrame(u16 *fbuf, int xs, int ys)
+{
+#ifdef PGL_NATIVEGL
+	GfxDrv_BeginDrawing();
+#endif
+
 	return(0);
 }
 
@@ -74,8 +85,9 @@ int I_SystemFrame(u16 *fbuf, int xs, int ys)
 	FRGL_EndInputFrame();
 
 
+#ifndef PGL_NATIVEGL
 	GfxDrv_BeginDrawing();
-	
+
 	for(y=0; y<ys; y++)
 	{
 //		cs=fbuf+(ys-y-1)*xs;
@@ -94,6 +106,7 @@ int I_SystemFrame(u16 *fbuf, int xs, int ys)
 	}
 	
 	btesh2_gfxcon_fb_dirty=1;
+#endif
 
 	GfxDrv_EndDrawing();
 	return(0);
@@ -135,6 +148,7 @@ void I_UpdateKeys (void)
 		if(!(key&0x8000))
 			i_keyrov[i_keypos++]=key;
 		BTM_ConHandleKey(key);
+		BTM_InventoryHandleKey(btm_wrl, key);
 	}
 }
 #endif
@@ -481,27 +495,27 @@ int BTMGL_DrawSkybox()
 	if(skybox_tex<=0)
 		return(0);
 
-	tkra_glMatrixMode(TKRA_MODELVIEW);
-	tkra_glPushMatrix();
+	pglMatrixMode(TKRA_MODELVIEW);
+	pglPushMatrix();
 
-	tkra_glTranslatef(cam_org[0], cam_org[1], cam_org[2]);
+	pglTranslatef(cam_org[0], cam_org[1], cam_org[2]);
 
-	tkra_glBindTexture(TKRA_TEXTURE_2D, skybox_tex);
+	pglBindTexture(TKRA_TEXTURE_2D, skybox_tex);
 
-	tkra_glVertexPointer(3, TKRA_GL_FLOAT, 8*4, skybox_tris+0);
+	pglVertexPointer(3, TKRA_GL_FLOAT, 8*4, skybox_tris+0);
 
 	if(skybox_onetex)
-		tkra_glTexCoordPointer(2, TKRA_GL_FLOAT, 8*4, skybox_tris+6);
+		pglTexCoordPointer(2, TKRA_GL_FLOAT, 8*4, skybox_tris+6);
 	else
-		tkra_glTexCoordPointer(2, TKRA_GL_FLOAT, 8*4, skybox_tris+4);
+		pglTexCoordPointer(2, TKRA_GL_FLOAT, 8*4, skybox_tris+4);
 
-	tkra_glColorPointer(4, TKRA_GL_UNSIGNED_BYTE, 8*4, skybox_tris+3);
-//	tkra_glDrawArrays(TKRA_GL_TRIANGLES, 0, 6*6);
-	tkra_glDrawArrays(TKRA_GL_TRIANGLES, 0, 6*5);
+	pglColorPointer(4, TKRA_GL_UNSIGNED_BYTE, 8*4, skybox_tris+3);
+//	pglDrawArrays(TKRA_GL_TRIANGLES, 0, 6*6);
+	pglDrawArrays(TKRA_GL_TRIANGLES, 0, 6*5);
 
-//	tkra_glDrawElements(TKRA_GL_TRIANGLES, 6*6, TKRA_GL_INT, cube_tris);
+//	pglDrawElements(TKRA_GL_TRIANGLES, 6*6, TKRA_GL_INT, cube_tris);
 
-	tkra_glPopMatrix();
+	pglPopMatrix();
 	return(0);
 }
 
@@ -569,16 +583,16 @@ int BTM_InterpolateDaySky(BTM_World *wrl)
 	switch((wrl->daytimer/180000))
 	{
 		case 0:			case 3:
-			tkra_glClearColor(0.5, 0.6, 0.7, 1.0);
+			pglClearColor(0.5, 0.6, 0.7, 1.0);
 			break;
 		case 1:		case 2:
-			tkra_glClearColor(0.3, 0.6, 0.9, 1.0);
+			pglClearColor(0.3, 0.6, 0.9, 1.0);
 			break;
 		case 4:		case 7:
-			tkra_glClearColor(0.7, 0.6, 0.3, 1.0);
+			pglClearColor(0.7, 0.6, 0.3, 1.0);
 			break;
 		case 5:		case 6:
-			tkra_glClearColor(0.1, 0.1, 0.1, 1.0);
+			pglClearColor(0.1, 0.1, 0.1, 1.0);
 			break;
 			
 	}
@@ -601,7 +615,7 @@ int BTM_InterpolateDaySky(BTM_World *wrl)
 	cg=((1.0-g)*cga)+(g*cgb);
 	cb=((1.0-g)*cba)+(g*cbb);
 
-	tkra_glClearColor(cr, cg, cb, 1.0);
+	pglClearColor(cr, cg, cb, 1.0);
 	
 	cy=(cr+2*cg+cb)/4;
 	cy=cy*(1.0/((0.3+2*0.6+0.9)/4));
@@ -622,11 +636,15 @@ int BTM_InterpolateDaySky(BTM_World *wrl)
 	return(0);
 }
 
-int tt_ray;
-int tt_draw;
-int tt_tick;
+volatile int tt_ray;
+volatile int tt_draw;
+volatile int tt_drawblock;
+volatile int tt_tick;
 
-BTM_World *btm_wrl;
+volatile int tt_rayframe;
+volatile int tt_drawframe;
+
+// BTM_World *btm_wrl;
 
 
 int BTM_ConCmd_Noclip(BTM_ConCmd *cmd, char **args)
@@ -711,6 +729,126 @@ int BTM_ConCmd_Instance(BTM_ConCmd *cmd, char **args)
 	return(0);
 }
 
+int BTM_PlayerPhysTick(BTM_World *wrl, int dt)
+{
+	static int acdt;
+	float dtf;
+	
+	if(btm_noclip)
+		return(0);
+	
+	acdt+=dt;
+	
+	if(acdt<25)
+		return(0);
+	
+	dtf=acdt/1000.0;
+	BTMGL_LockWorld();
+	BTM_CheckWorldMoveVel(wrl, dtf,
+		cam_org, cam_vel,
+		cam_org, cam_vel, &cam_mvflags);
+	BTMGL_UnlockWorld();
+
+	acdt=0;
+
+	return(0);
+}
+
+int BTM_RayTick(void *ptr, int dt)
+{
+	static int wrldt;
+	BTM_World *wrl;
+	int t0, t1, tt;
+
+	wrl=ptr;
+
+	wrldt+=dt;
+	if(wrldt>5000)
+	{
+		BTMGL_LockWorld();
+		BTM_CheckUnloadRegions(wrl);
+		BTMGL_UnlockWorld();
+
+		printf("Raycast %f%%\n", (100.0*tt_ray)/wrldt);
+		printf("DrawBlk %f%%\n", (100.0*tt_drawblock)/wrldt);
+		printf("Draw    %f%%\n", (100.0*tt_draw)/wrldt);
+		printf("Tick    %f%%\n", (100.0*tt_tick)/wrldt);
+
+		printf("Ray fps  %f\n", (1.0*tt_rayframe)/(wrldt/1000.0));
+		printf("Draw fps %f\n", (1.0*tt_drawframe)/(wrldt/1000.0));
+
+		tt_ray=0;
+		tt_drawblock=0;
+		tt_draw=0;
+		tt_tick=0;
+
+		tt_rayframe=0;
+		tt_drawframe=0;
+
+		wrldt=0;
+	}
+
+	BTM_PlayerPhysTick(wrl, dt);
+
+#if 1
+	t0=I_TimeMS();
+	
+//	BTMGL_LockWorld();
+
+//	BTM_RaycastScene(wrl);
+	BTM_RaycastSceneQuad(wrl);
+	t1=I_TimeMS();
+	tt_ray+=t1-t0;
+
+//	memset(fbuf, 0, 320*200*2);
+//	memset(fbuf, 0x7F, 320*200*2);
+
+	t0=I_TimeMS();
+
+	BTMGL_DrawSceneBlocks(wrl);
+
+	BTMGL_DrawWorldEntities(wrl);
+
+	t1=I_TimeMS();
+	tt_drawblock+=t1-t0;
+#endif
+
+#if 1
+	t1=I_TimeMS();
+	tt_draw+=t1-t0;
+
+	t0=I_TimeMS();
+
+	BTM_BlockTickWorld(wrl, dt);
+
+	t1=I_TimeMS();
+	tt_tick+=t1-t0;
+#endif
+
+	tt_rayframe++;
+
+	return(0);
+}
+
+int btm_raythreadproc(void *ptr)
+{
+	int tt, ltt, dt;
+
+	ltt=I_TimeMS();
+	while(!gfxdrv_kill)
+	{
+		tt=I_TimeMS();
+		dt=tt-ltt;
+		if(dt<32)
+			continue;
+		ltt=tt;
+
+		BTM_RayTick(ptr, dt);
+	}
+
+	return(0);
+}
+
 int main(int argc, char *argv[])
 {
 	char tb[256];
@@ -742,6 +880,9 @@ int main(int argc, char *argv[])
 	BTM_ConAddCommand("time", BTM_ConCmd_Time);
 	BTM_ConAddCommand("instance", BTM_ConCmd_Instance);
 
+	I_SystemInit();
+	BTM_PGL_InitOpenGlFuncs();
+
 	printf("Init Skybox\n");
 
 	BTMGL_InitSkybox();
@@ -753,7 +894,7 @@ int main(int argc, char *argv[])
 	TKRA_SetupForState(ractx);
 	TKRA_SetCurrentContext(ractx);
 
-	tkra_glViewport(0, 0, 320, 200);
+	pglViewport(0, 0, 320, 200);
 
 	printf("Load Textures\n");
 
@@ -764,22 +905,25 @@ int main(int argc, char *argv[])
 //	TKRA_UpdateTexImg(raimg, tex0, txs, tys, -1);
 //	TKRA_BindTexImg(ractx, raimg);
 
-	tkra_glBindTexture(TKRA_TEXTURE_2D, 1);
-	tkra_glTexImage2D(TKRA_TEXTURE_2D, 0, 3, txs, tys, 0,
+	pglBindTexture(TKRA_TEXTURE_2D, 1);
+	pglTexImage2D(TKRA_TEXTURE_2D, 0, 3, txs, tys, 0,
 		TKRA_RGBA, TKRA_GL_UNSIGNED_SHORT_5_5_5_1, tex0);
 #endif
 
 //	tbuf=BTM_LoadFileTmp("gfx/dummy.dds", &j);
 
-	btmgl_filter_min=GL_NEAREST_MIPMAP_NEAREST;
-	btmgl_filter_max=GL_NEAREST;
+//	btmgl_filter_min=GL_NEAREST_MIPMAP_NEAREST;
+	btmgl_filter_min=GL_NEAREST_MIPMAP_LINEAR;
+//	btmgl_filter_min=GL_LINEAR_MIPMAP_NEAREST;
+//	btmgl_filter_max=GL_NEAREST;
+	btmgl_filter_max=GL_LINEAR;
 
 #if 1
 	skybox_tex_stars=1;
 	tbuf=BTM_LoadFileTmp("gfx/sky2.dds", &j);
 	if(tbuf)
 	{
-		tkra_glBindTexture(TKRA_TEXTURE_2D, skybox_tex_stars);
+		pglBindTexture(TKRA_TEXTURE_2D, skybox_tex_stars);
 		BTMGL_UploadCompressed(tbuf, 1, 1);
 	}
 #endif
@@ -794,16 +938,16 @@ int main(int argc, char *argv[])
 #if 0
 //	tex0=BTIC1H_Img_LoadTGA5551("atlas0_far.tga", &txs, &tys);
 	tex0=BTIC1H_Img_LoadTGA5551("atlas0_2a.tga", &txs, &tys);
-	tkra_glBindTexture(TKRA_TEXTURE_2D, 2);
-	tkra_glTexImage2D(TKRA_TEXTURE_2D, 0, 4, txs, tys, 0,
+	pglBindTexture(TKRA_TEXTURE_2D, 2);
+	pglTexImage2D(TKRA_TEXTURE_2D, 0, 4, txs, tys, 0,
 		TKRA_RGBA, TKRA_GL_UNSIGNED_SHORT_5_5_5_1, tex0);
 #endif
 
-//	tbuf=BTM_LoadFileTmp("gfx/atlas0_2a.dds", &j);
-	tbuf=BTM_LoadFileTmp("gfx/atlas0_2b.dds", &j);
+	tbuf=BTM_LoadFileTmp("gfx/atlas0_2a.dds", &j);
+//	tbuf=BTM_LoadFileTmp("gfx/atlas0_2b.dds", &j);
 	if(tbuf)
 	{
-		tkra_glBindTexture(TKRA_TEXTURE_2D, 2);
+		pglBindTexture(TKRA_TEXTURE_2D, 2);
 		BTMGL_UploadCompressed(tbuf, 1, 1);
 	}
 
@@ -820,6 +964,9 @@ int main(int argc, char *argv[])
 //		tex->rgb[z]=tex0[(63-y)*64+x];
 //	}
 
+//	btm_drawdist=96;
+	btm_drawdist=128;
+//	btm_drawdist=192;
 
 	BTM_RaycastInitTables();
 
@@ -854,11 +1001,11 @@ int main(int argc, char *argv[])
 //	tex=BTMRA_AllocTexture(6);
 //	skytex=BTMRA_AllocTexture(8);
 
-	BTM_UpdateWorldBlockOcc(wrl);
+//	BTM_UpdateWorldBlockOcc(wrl);
 
 	printf("Go\n");
 
-	I_SystemInit();
+//	I_SystemInit();
 
 	xs=320;
 	ys=200;
@@ -888,14 +1035,15 @@ int main(int argc, char *argv[])
 	cam_org[1]=128;
 	cam_org[2]=100;
 
-	tkra_glDepthRange(0.0, 1.0);
-	tkra_glClearDepth(0.99);
+//	pglDepthRange(0.0, 1.0);
+	pglDepthRange(0.0, 0.75);
+	pglClearDepth(0.999);
 
-	tkra_glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-	tkra_glBlendFunc(GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA);
-	tkra_glAlphaFunc(GL_GEQUAL, 0.5);
+	pglTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+	pglBlendFunc(GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA);
+	pglAlphaFunc(GL_GEQUAL, 0.5);
 	
-	tkra_glClearColor(0.3, 0.6, 0.9, 1.0);
+	pglClearColor(0.3, 0.6, 0.9, 1.0);
 	wrl->daytimer=360;
 
 //	BTM_LoadMenu("dialog/mainmenu0.xml");
@@ -919,6 +1067,14 @@ int main(int argc, char *argv[])
 
 	cam_ang_yaw=wrl->cam_yaw*(360.0/256.0);
 	cam_ang_pitch=wrl->cam_pitch*(360.0/256.0);
+	
+	if(wrl->cam_flags&1)
+		btm_noclip=1;
+
+#ifdef BTM_RAYTHREAD
+	thThread(btm_raythreadproc, wrl);
+#endif
+
 
 	wrldt=0;
 	tt=I_TimeMS();
@@ -936,24 +1092,35 @@ int main(int argc, char *argv[])
 
 		btmgl_time_ms=tt;
 
+// #ifndef BTM_RAYTHREAD
+#if 0
 		wrldt+=dt;
 		if(wrldt>5000)
 		{
+			BTMGL_LockWorld();
 			BTM_CheckUnloadRegions(wrl);
+			BTMGL_UnlockWorld();
 
 			printf("Raycast %f%%\n", (100.0*tt_ray)/wrldt);
+			printf("DrawBlk %f%%\n", (100.0*tt_drawblock)/wrldt);
 			printf("Draw    %f%%\n", (100.0*tt_draw)/wrldt);
 			printf("Tick    %f%%\n", (100.0*tt_tick)/wrldt);
 
 			tt_ray=0;
+			tt_drawblock=0;
 			tt_draw=0;
 			tt_tick=0;
 
 			wrldt=0;
 		}
+#endif
 		
 		if(dt>500)
 			dt=500;
+
+		tt_drawframe++;
+
+		I_BeginFrame(fbuf, xs, ys);
 
 		I_UpdateKeys();
 
@@ -964,10 +1131,15 @@ int main(int argc, char *argv[])
 		
 		BTM_MenuDoInput(dt);
 		BTM_ConDoInput(dt);
+		BTM_InvenDoInput(dt);
 
 		BTM_InterpolateDaySky(wrl);
 
-		if(!BTM_MenuDownP() && !BTM_ConDownP())
+		wrl->cam_flags&=~1;
+		if(btm_noclip)
+			wrl->cam_flags|=1;
+
+		if(!BTM_MenuDownP() && !BTM_ConDownP() && !BTM_InvenOpenP())
 		{
 			wrl->daytimer+=dt;
 		
@@ -975,8 +1147,10 @@ int main(int argc, char *argv[])
 			{
 				if(wrl->scr_lhit)
 				{
+					BTMGL_LockWorld();
 					wrl->sel_blk=BTM_GetWorldBlockCix(wrl, wrl->scr_lhit);
 					wrl->sel_bt=wrl->sel_blk&255;
+					BTMGL_UnlockWorld();
 				}
 			}
 
@@ -1011,8 +1185,10 @@ int main(int argc, char *argv[])
 						}
 					}
 				
+					BTMGL_LockWorld();
 					BTM_SetWorldBlockCix(wrl, wrl->scr_lahit, tblk);
 					BTM_UpdateWorldBlockOccCix2(wrl, wrl->scr_lahit);
+					BTMGL_UnlockWorld();
 				}
 			}
 
@@ -1021,8 +1197,10 @@ int main(int argc, char *argv[])
 			{
 				if(wrl->scr_lhit && (wrl->sel_bt>=4))
 				{
+					BTMGL_LockWorld();
 					BTM_SetWorldBlockCix(wrl, wrl->scr_lhit, wrl->sel_bt);
 					BTM_UpdateWorldBlockOccCix2(wrl, wrl->scr_lhit);
+					BTMGL_UnlockWorld();
 				}
 			}
 
@@ -1031,19 +1209,25 @@ int main(int argc, char *argv[])
 			{
 				if(wrl->scr_lhit)
 				{
+					BTMGL_LockWorld();
 					BTM_SetWorldBlockCix(wrl, wrl->scr_lhit, BTM_BLKTY_AIR2);
 					BTM_UpdateWorldBlockOccCix2(wrl, wrl->scr_lhit);
+					BTMGL_UnlockWorld();
 				}
 			}
 
 			if(I_KeyDown(K_ENTER) && !I_KeyDownL(K_ENTER))
 			{
+				BTMGL_LockWorld();
+
 				mob=BTM_QueryWorldEntityForRay(wrl,
 					wrl->scr_laspos, wrl->scr_laepos);
 				if(mob)
 				{
 					BTM_EventPlayerUseMob(wrl, mob);
 				}
+
+				BTMGL_UnlockWorld();
 			}
 
 			if(!I_KeyDown(K_SHIFT))
@@ -1108,6 +1292,7 @@ int main(int argc, char *argv[])
 						if(cam_vel[2]<0)
 							cam_vel[2]=0;
 						cam_vel[2]+=6;
+						cam_mvflags&=~1;
 					}else if(cam_mvflags&2)
 					{
 						cam_ivel[2]=12;
@@ -1220,9 +1405,11 @@ int main(int argc, char *argv[])
 					}
 				}
 				
-				BTM_CheckWorldMoveVel(wrl, dtf,
-					cam_org, cam_vel,
-					cam_org, cam_vel, &cam_mvflags);
+//				BTM_PlayerPhysTick(wrl, dt);
+				
+//				BTM_CheckWorldMoveVel(wrl, dtf,
+//					cam_org, cam_vel,
+//					cam_org, cam_vel, &cam_mvflags);
 			}
 		}
 		
@@ -1309,7 +1496,13 @@ int main(int argc, char *argv[])
 			((u64)((u32)(cam_org[1]*256)&0xFFFFFFU)<<24) |
 			((u64)((u32)(cam_org[2]*256)&0x00FFFFU)<<48) ;
 		
+#ifndef BTM_RAYTHREAD
+		BTM_RayTick(wrl, dt);
+#endif
+
+#if 0
 		t0=I_TimeMS();
+		
 //		BTM_RaycastScene(wrl);
 		BTM_RaycastSceneQuad(wrl);
 		t1=I_TimeMS();
@@ -1320,43 +1513,58 @@ int main(int argc, char *argv[])
 
 		t0=I_TimeMS();
 
-// 		tkra_glClear(TKRA_GL_DEPTH_BUFFER_BIT);
-		tkra_glClear(TKRA_GL_DEPTH_BUFFER_BIT | TKRA_GL_COLOR_BUFFER_BIT);
-
-		tkra_glMatrixMode(TKRA_MODELVIEW);
-		tkra_glLoadIdentity();
-
-		tkra_glMatrixMode(TKRA_PROJECTION);
-		tkra_glLoadIdentity();
-		tkra_glFrustum(-1, 1, -0.75, 0.75, 1.0, 1024);
-		tkra_glRotatef(90, 1, 0, 0);
-		tkra_glRotatef(cam_ang_pitch, 1, 0, 0);
-
-		tkra_glRotatef(-cam_ang_yaw, 0, 0, 1);
-		tkra_glTranslatef(-cam_org[0], -cam_org[1], -cam_org[2]);
-
-		tkra_glDisable(GL_CULL_FACE);
-		tkra_glDepthFunc(GL_LEQUAL);
-		tkra_glEnable(GL_DEPTH_TEST);
-//		tkra_glEnable(GL_BLEND);
-		tkra_glDisable(GL_BLEND);
-
-		BTMGL_DrawSkybox();
-
-		tkra_glDisable(GL_BLEND);
-
 		BTMGL_DrawSceneBlocks(wrl);
-		BTMGL_DrawWorldEntities(wrl);
 
 		t1=I_TimeMS();
-		tt_draw+=t1-t0;
+		tt_drawblock+=t1-t0;
+#endif
 
 		t0=I_TimeMS();
 
-		BTM_BlockTickWorld(wrl, dt);
+// 		pglClear(TKRA_GL_DEPTH_BUFFER_BIT);
+		pglClear(TKRA_GL_DEPTH_BUFFER_BIT | TKRA_GL_COLOR_BUFFER_BIT);
 
-		t1=I_TimeMS();
-		tt_tick+=t1-t0;
+		pglMatrixMode(TKRA_MODELVIEW);
+		pglLoadIdentity();
+
+#if 0
+		pglRotatef(90, 1, 0, 0);
+		pglRotatef(cam_ang_pitch, 1, 0, 0);
+
+		pglRotatef(-cam_ang_yaw, 0, 0, 1);
+		pglTranslatef(-cam_org[0], -cam_org[1], -cam_org[2]);
+#endif
+
+		pglMatrixMode(TKRA_PROJECTION);
+		pglLoadIdentity();
+//		pglFrustum(-1, 1, -0.75, 0.75, 1.0, 1024);
+//		pglFrustum(-1, 1,  0.75, -0.75, 1.0, 1024);
+//		pglFrustum(-1*0.5, 1*0.5,  0.75*0.5, -0.75*0.5, 1.0*0.5, 1024*1.0);
+		pglFrustum(-0.1, 0.1,  0.075, -0.075, 0.1, 1024);
+
+#if 1
+		pglRotatef(90, 1, 0, 0);
+		pglRotatef(cam_ang_pitch, 1, 0, 0);
+
+		pglRotatef(-cam_ang_yaw, 0, 0, 1);
+		pglTranslatef(-cam_org[0], -cam_org[1], -cam_org[2]);
+#endif
+
+		pglDisable(GL_CULL_FACE);
+		pglDepthFunc(GL_LEQUAL);
+		pglEnable(GL_DEPTH_TEST);
+//		pglEnable(GL_BLEND);
+		pglDisable(GL_BLEND);
+
+		BTMGL_DrawSkybox();
+
+		pglDisable(GL_BLEND);
+
+//		BTMGL_DrawSceneBlocks(wrl);
+		BTMGL_DrawSceneArrays(wrl);
+//		BTMGL_DrawWorldEntities(wrl);
+		BTMGL_DrawVisibleSprites(wrl);
+
 
 #if 0
 		BTMRA_DrawSky(scr, skytex, 0);
@@ -1371,17 +1579,18 @@ int main(int argc, char *argv[])
 #endif
 
 
-		tkra_glMatrixMode(TKRA_MODELVIEW);
-		tkra_glLoadIdentity();
+		pglMatrixMode(TKRA_MODELVIEW);
+		pglLoadIdentity();
 
-		tkra_glMatrixMode(TKRA_PROJECTION);
-		tkra_glLoadIdentity();
-		tkra_glOrtho(-160, 160, 100, -100, -999.0, 999.0);
+		pglMatrixMode(TKRA_PROJECTION);
+		pglLoadIdentity();
+//		pglOrtho(-160, 160, 100, -100, -999.0, 999.0);
+		pglOrtho(-160, 160, -100, 100, -999.0, 999.0);
 
-		tkra_glDisable(GL_CULL_FACE);
-		tkra_glDisable(GL_DEPTH_TEST);
-		tkra_glDisable(GL_BLEND);
-		tkra_glEnable(GL_ALPHA_TEST);
+		pglDisable(GL_CULL_FACE);
+		pglDisable(GL_DEPTH_TEST);
+		pglDisable(GL_BLEND);
+		pglEnable(GL_ALPHA_TEST);
 
 		j=wrl->sel_bt;
 		k=btmgl_vox_atlas_side[j&255];
@@ -1394,27 +1603,44 @@ int main(int argc, char *argv[])
 		f2=(y+0)*(1.0/16)+(1.0/128);
 		f3=(y+1)*(1.0/16)-(1.0/128);
 
-		tkra_glColor4f(1.0, 1.0, 1.0, 1.0);
-		tkra_glBindTexture(GL_TEXTURE_2D, 2);
-		tkra_glBegin(GL_QUADS);
-		tkra_glTexCoord2f(f0, f2);
-		tkra_glVertex2f(64, -66);
-		tkra_glTexCoord2f(f0, f3);
-		tkra_glVertex2f(64, -98);
-		tkra_glTexCoord2f(f1, f3);
-		tkra_glVertex2f(96, -98);
-		tkra_glTexCoord2f(f1, f2);
-		tkra_glVertex2f(96, -66);
+		pglColor4f(1.0, 1.0, 1.0, 1.0);
+		pglBindTexture(GL_TEXTURE_2D, 2);
+		pglBegin(GL_QUADS);
+		pglTexCoord2f(f0, f2);
+		pglVertex2f(64, -66);
+		pglTexCoord2f(f0, f3);
+		pglVertex2f(64, -98);
+		pglTexCoord2f(f1, f3);
+		pglVertex2f(96, -98);
+		pglTexCoord2f(f1, f2);
+		pglVertex2f(96, -66);
 
-		tkra_glEnd();
+		pglEnd();
 		
 		sprintf(tb, "%02X\n%s", wrl->sel_bt,
 			BTM_BlockMiniDesc(wrl, wrl->sel_bt));
 		BTM_DrawString8px(96, -74, tb, 0xFFFFFFFFU);
 
+		BTM_DrawInventory(wrl);
 		BTM_DrawMenu();
 		BTM_DrawConsole();
 
+		sprintf(tb, "%03d", 1000/dt);
+		BTM_DrawString8px(160-24, 100-8, tb, 0xFFFFFFFFU);
+
+		sprintf(tb, "%04d", dt);
+		BTM_DrawString8px(160-32, 100-16, tb, 0xFFFFFFFFU);
+
+		sprintf(tb, "%05d", (int)floor(cam_org[0]));
+		BTM_DrawString8px(160-40, 100-24, tb, 0xFFFFFFFFU);
+		sprintf(tb, "%05d", (int)floor(cam_org[1]));
+		BTM_DrawString8px(160-40, 100-32, tb, 0xFFFFFFFFU);
+		sprintf(tb, "%03d", (int)floor(cam_org[2]));
+		BTM_DrawString8px(160-24, 100-40, tb, 0xFFFFFFFFU);
+
+		BTM_DrawString8px(160-24, 100-40, NULL, 0xFFFFFFFFU);
+
+#if 0
 		l=1000/dt;
 		BTM_DrawCharFBuf(fbuf, 320, 320-24, 0, '0'+((l/100)%10), 0x7FFF, 0x0000);
 		BTM_DrawCharFBuf(fbuf, 320, 320-16, 0, '0'+((l/10)%10), 0x7FFF, 0x0000);
@@ -1447,256 +1673,15 @@ int main(int argc, char *argv[])
 		BTM_DrawCharFBuf(fbuf, 320, 320-16, 32, '0'+((l/10)%10), 0x7FFF, 0x0000);
 		BTM_DrawCharFBuf(fbuf, 320, 320- 8, 32, '0'+(l%10), 0x7FFF, 0x0000);
 
-//		tkra_glVertexPointer(3, TKRA_GL_FLOAT, 6*4, mdl_tris+0);
-//		tkra_glTexCoordPointer(2, TKRA_GL_FLOAT, 6*4, mdl_tris+3);
-//		tkra_glColorPointer(4, TKRA_GL_UNSIGNED_BYTE, 6*4, mdl_tris+5);
-//		tkra_glDrawArrays(TKRA_GL_TRIANGLES, 0, mdl_ntris*3);
+//		pglVertexPointer(3, TKRA_GL_FLOAT, 6*4, mdl_tris+0);
+//		pglTexCoordPointer(2, TKRA_GL_FLOAT, 6*4, mdl_tris+3);
+//		pglColorPointer(4, TKRA_GL_UNSIGNED_BYTE, 6*4, mdl_tris+5);
+//		pglDrawArrays(TKRA_GL_TRIANGLES, 0, mdl_ntris*3);
+
+#endif
 
 
 		I_SystemFrame(fbuf, xs, ys);
 	}
-
-#if 0
-	memset(tsampbuf, 0, 16384*2);
-//	SoundDev_WriteStereoSamples(tsampbuf, 2048);
-//	SoundDev_WriteStereoSamples2(tsampbuf, 1024, 1024);
-
-//	TKRA_LoadPly("bun_zipper_res4.ply", &mdl_tris, &mdl_ntris);
-//	LoadTrisStl("Utah_teapot.stl", &mdl_tris, &mdl_ntris);
-
-	printf("Model %d triangles\n", mdl_ntris);
-
-	tex0=BTIC1H_Img_LoadTGA555("Street256.tga", &txs, &tys);
-
-	ractx=TKRA_AllocContext();
-	TKRA_SetupScreen(ractx, 320, 200);
-	raimg=TKRA_GetTexImg(ractx, 1);
-	TKRA_UpdateTexImg(raimg, tex0, txs, tys, -1);
-//	TKRA_UpdateTexImg(raimg, tex0, txs, tys, 0);
-
-	TKRA_BindTexImg(ractx, raimg);
-	TKRA_SetupForState(ractx);
-
-	TKRA_SetCurrentContext(ractx);
-
-	ractx->mat_tproj=TKRA_MatrixIdentify();
-//	__debugbreak();
-
-	TKRA_UnpackMatrix16fv(ractx->mat_tproj, xyz0);
-	printf("Identity\n");
-	printf("%f %f %f %f\n", xyz0[ 0], xyz0[ 1], xyz0[ 2], xyz0[ 3]);
-	printf("%f %f %f %f\n", xyz0[ 4], xyz0[ 5], xyz0[ 6], xyz0[ 7]);
-	printf("%f %f %f %f\n", xyz0[ 8], xyz0[ 9], xyz0[10], xyz0[11]);
-	printf("%f %f %f %f\n", xyz0[12], xyz0[13], xyz0[14], xyz0[15]);
-
-
-//	ractx->mat_tproj=TKRA_MatrixSetupFrustum(ractx->mat_tproj,
-//		-1, 1,  -1, 1,  1, 8192);
-
-//	ractx->mat_tproj=TKRA_MatrixTranslatef(ractx->mat_tproj, 0, 0, 1);
-
-	ractx->mat_xform=TKRA_MatrixIdentify();
-//	ractx->mat_xform=TKRA_MatrixTranslatef(ractx->mat_xform, 0, 0, 15);
-//	ractx->mat_xform=TKRA_MatrixTranslatef(ractx->mat_xform, 0, 0, -25);
-
-	ractx->mat_xproj=TKRA_MatrixIdentify();
-	ractx->mat_xproj=TKRA_MatrixSetupFrustum(ractx->mat_xproj,
-		-1, 1,  -1, 1,  1.0, 8192);
-	ractx->mat_xproj=TKRA_MatrixTranslatef(ractx->mat_xproj, 0, 0, -25);
-
-	ractx->mat_tproj=TKRA_MatrixMultiply(
-		ractx->mat_xform, ractx->mat_xproj);
-//	ractx->mat_tproj=TKRA_MatrixMultiply(
-//		ractx->mat_xproj, ractx->mat_xform);
-
-	TKRA_UnpackMatrix16fv(ractx->mat_xform, xyz0);
-	printf("XForm\n");
-	printf("%f %f %f %f\n", xyz0[ 0], xyz0[ 1], xyz0[ 2], xyz0[ 3]);
-	printf("%f %f %f %f\n", xyz0[ 4], xyz0[ 5], xyz0[ 6], xyz0[ 7]);
-	printf("%f %f %f %f\n", xyz0[ 8], xyz0[ 9], xyz0[10], xyz0[11]);
-	printf("%f %f %f %f\n", xyz0[12], xyz0[13], xyz0[14], xyz0[15]);
-
-	TKRA_UnpackMatrix16fv(ractx->mat_xproj, xyz0);
-	printf("XProj\n");
-	printf("%f %f %f %f\n", xyz0[ 0], xyz0[ 1], xyz0[ 2], xyz0[ 3]);
-	printf("%f %f %f %f\n", xyz0[ 4], xyz0[ 5], xyz0[ 6], xyz0[ 7]);
-	printf("%f %f %f %f\n", xyz0[ 8], xyz0[ 9], xyz0[10], xyz0[11]);
-	printf("%f %f %f %f\n", xyz0[12], xyz0[13], xyz0[14], xyz0[15]);
-
-	TKRA_UnpackMatrix16fv(ractx->mat_tproj, xyz0);
-	printf("TProj\n");
-	printf("%f %f %f %f\n", xyz0[ 0], xyz0[ 1], xyz0[ 2], xyz0[ 3]);
-	printf("%f %f %f %f\n", xyz0[ 4], xyz0[ 5], xyz0[ 6], xyz0[ 7]);
-	printf("%f %f %f %f\n", xyz0[ 8], xyz0[ 9], xyz0[10], xyz0[11]);
-	printf("%f %f %f %f\n", xyz0[12], xyz0[13], xyz0[14], xyz0[15]);
-
-	xs=320;
-	ys=200;
-//	fbuf=malloc(xs*ys*sizeof(u16));
-	fbuf=ractx->screen_rgb;
-
-	memcpy(fbuf, tex0, 256*200*2);
-	memset(ractx->screen_zbuf, 255, 320*200*2);
-
-#if 0
-//	v1_parm[TKRA_VX_XPOS]=64<<16;
-//	v1_parm[TKRA_VX_XPOS]=32<<16;
-	v1_parm[TKRA_VX_XPOS]=(-32)<<16;
-//	v1_parm[TKRA_VX_YPOS]=184<<16;
-	v1_parm[TKRA_VX_YPOS]=224<<16;
-
-//	v2_parm[TKRA_VX_XPOS]=256<<16;
-	v2_parm[TKRA_VX_XPOS]=444<<16;
-//	v2_parm[TKRA_VX_YPOS]=184<<16;
-	v2_parm[TKRA_VX_YPOS]=160<<16;
-
-	v3_parm[TKRA_VX_XPOS]=160<<16;
-	v3_parm[TKRA_VX_YPOS]=16<<16;
-
-	v1_parm[TKRA_VX_ZPOS]=16<<16;
-	v2_parm[TKRA_VX_ZPOS]=16<<16;
-	v3_parm[TKRA_VX_ZPOS]=16<<16;
-
-//	v1_parm[TKRA_VX_CPOS]=0xFFFFFFFFFFFFFFFFULL;
-//	v2_parm[TKRA_VX_CPOS]=0xFFFFFFFFFFFFFFFFULL;
-//	v3_parm[TKRA_VX_CPOS]=0xFFFFFFFFFFFFFFFFULL;
-
-	v1_parm[TKRA_VX_CPOS]=0xFFFFFFFF00000000ULL;
-	v2_parm[TKRA_VX_CPOS]=0xFFFF0000FFFF0000ULL;
-	v3_parm[TKRA_VX_CPOS]=0xFFFF00000000FFFFULL;
-
-	v1_parm[TKRA_VX_TPOS]=0x0000000000000000ULL;
-	v2_parm[TKRA_VX_TPOS]=0x0000000000FF0000ULL;
-	v3_parm[TKRA_VX_TPOS]=0x00FF000000800000ULL;
-
-	TKRA_WalkTriangle(ractx, v1_parm, v2_parm, v3_parm);
-#endif
-
-	for(i=0; i<8; i++)
-	{
-		vtx_xyz[i*4+0]=(i&1)?(10.0):(-10.0);
-		vtx_xyz[i*4+1]=(i&2)?(10.0):(-10.0);
-		vtx_xyz[i*4+2]=(i&4)?(10.0):(-10.0);
-		vtx_xyz[i*4+3]=0;
-		vtx_rgb[i]=0xFF000000|
-			((i&4)?0x00FF0000:0x007F0000)|
-			((i&2)?0x0000FF00:0x00007F00)|
-			((i&1)?0x000000FF:0x0000007F);
-	}
-
-	tt=I_TimeMS();
-	ltt=tt;
-	while(!gfxdrv_kill)
-	{
-		tt=I_TimeMS();
-		dt=tt-ltt;
-		ltt=tt;
-
-		if(!dt)
-		{
-			continue;
-		}
-
-		memset(fbuf, 0, 320*200*2);
-//		memset(ractx->screen_zbuf, 255, 320*200*2);
-		memset(ractx->screen_zbuf, 255, 160*100*2);
-
-#if 0
-		xyz0[0]=-0.75;	xyz0[1]=-0.75;	xyz0[ 2]=2.0;
-		xyz0[4]= 0.75;	xyz0[5]=-0.75;	xyz0[ 6]=2.0;
-		xyz0[8]= 0.0;	xyz0[9]= 0.75;	xyz0[10]=2.0;
-		st0[0]=0.0;		st0[1]=0.0;
-		st0[2]=1.0;		st0[3]=0.0;
-		st0[4]=0.5;		st0[5]=1.0;
-//		rgb0[0]=0xFFFFFFFF;
-//		rgb0[1]=0xFFFFFFFF;
-//		rgb0[2]=0xFFFFFFFF;
-
-		rgb0[0]=0xFFFF8080;
-		rgb0[1]=0xFF80FF80;
-		rgb0[2]=0xFF8080FF;
-		
-		tst_rot2d(xyz0+0, xyz0+0, tt/2500.0);
-		tst_rot2d(xyz0+4, xyz0+4, tt/2500.0);
-		tst_rot2d(xyz0+8, xyz0+8, tt/2500.0);
-
-		TKRA_DrawTriangleArrayBasic(ractx, 
-			xyz0,	16,
-			st0,	8,
-			rgb0,	4,
-			1);
-#endif
-
-		for(i=0; i<6; i++)
-		{
-			TKRA_Vec3F_Copy(vtx_xyz+cube_tris[i*6+0]*4, xyz0+(i*6+0)*4);
-			TKRA_Vec3F_Copy(vtx_xyz+cube_tris[i*6+1]*4, xyz0+(i*6+1)*4);
-			TKRA_Vec3F_Copy(vtx_xyz+cube_tris[i*6+2]*4, xyz0+(i*6+2)*4);
-			TKRA_Vec3F_Copy(vtx_xyz+cube_tris[i*6+3]*4, xyz0+(i*6+3)*4);
-			TKRA_Vec3F_Copy(vtx_xyz+cube_tris[i*6+4]*4, xyz0+(i*6+4)*4);
-			TKRA_Vec3F_Copy(vtx_xyz+cube_tris[i*6+5]*4, xyz0+(i*6+5)*4);
-			
-			rgb0[i*6+0]=vtx_rgb[cube_tris[i*6+0]];
-			rgb0[i*6+1]=vtx_rgb[cube_tris[i*6+1]];
-			rgb0[i*6+2]=vtx_rgb[cube_tris[i*6+2]];
-			rgb0[i*6+3]=vtx_rgb[cube_tris[i*6+3]];
-			rgb0[i*6+4]=vtx_rgb[cube_tris[i*6+4]];
-			rgb0[i*6+5]=vtx_rgb[cube_tris[i*6+5]];
-
-			st0[(i*6+0)*2+0]=0.0;		st0[(i*6+0)*2+1]=0.0;
-			st0[(i*6+1)*2+0]=1.0;		st0[(i*6+1)*2+1]=0.0;
-			st0[(i*6+2)*2+0]=1.0;		st0[(i*6+2)*2+1]=1.0;
-			st0[(i*6+3)*2+0]=0.0;		st0[(i*6+3)*2+1]=0.0;
-			st0[(i*6+4)*2+0]=1.0;		st0[(i*6+4)*2+1]=1.0;
-			st0[(i*6+5)*2+0]=0.0;		st0[(i*6+5)*2+1]=1.0;
-		}
-		
-#if 0
-		ang=tt/2500.0;
-		for(i=0; i<(6*6); i++)
-		{
-			tst_rot2d_xz(xyz0+i*4, xyz0+i*4, ang);
-		}
-
-		ang=tt/25000.0;
-		for(i=0; i<(6*6); i++)
-		{
-			tst_rot2d_xy(xyz0+i*4, xyz0+i*4, ang);
-		}
-
-		TKRA_DrawTriangleArrayBasic(ractx, 
-			xyz0,	16,
-			st0,	8,
-			rgb0,	4,
-			12);
-#endif
-
-		ang=tt/2500.0;
-
-		ractx->mat_xform=TKRA_MatrixIdentify();
-//		ractx->mat_xform=TKRA_MatrixTranslatef(ractx->mat_xform, 0, 0, 15);
-		ractx->mat_xform=TKRA_MatrixRotatef(ractx->mat_xform,
-			ang*100, 0, 1, 0);
-		ractx->mat_xform=TKRA_MatrixRotatef(ractx->mat_xform,
-			ang*10, 0, 0, 1);
-
-		ractx->mat_tproj=TKRA_MatrixMultiply(
-			ractx->mat_xform, ractx->mat_xproj);
-
-//		TKRA_DrawTriangleArrayBasic(ractx, 
-//			mdl_tris+0,	6*4,
-//			mdl_tris+3,	6*4,
-//			mdl_tris+5,	6*4,
-//			mdl_ntris);
-
-		tkra_glVertexPointer(3, TKRA_GL_FLOAT, 6*4, mdl_tris+0);
-		tkra_glTexCoordPointer(2, TKRA_GL_FLOAT, 6*4, mdl_tris+3);
-		tkra_glColorPointer(4, TKRA_GL_UNSIGNED_BYTE, 6*4, mdl_tris+5);
-		tkra_glDrawArrays(TKRA_GL_TRIANGLES, 0, mdl_ntris*3);
-
-//		dt*=2;
-		
-		I_SystemFrame(fbuf, xs, ys);
-	}
-#endif
+	return(0);
 }
