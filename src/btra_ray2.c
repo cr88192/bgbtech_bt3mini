@@ -29,6 +29,15 @@ u64 BTM_WorldCorgToRcix(u64 cpos);
 u32 BTM_GetWorldBlockCorg(BTM_World *wrl, u64 corg);
 u64 BTM_ConvRcixToBlkPos(u64 rcix);
 
+u64 BTM_BlockOffsetRcix(u64 rcix, int dx, int dy, int dz);
+
+u64 BTM_BlockOffsetRcixPx1(u64 rcix);
+u64 BTM_BlockOffsetRcixNx1(u64 rcix);
+u64 BTM_BlockOffsetRcixPy1(u64 rcix);
+u64 BTM_BlockOffsetRcixNy1(u64 rcix);
+u64 BTM_BlockOffsetRcixPz1(u64 rcix);
+u64 BTM_BlockOffsetRcixNz1(u64 rcix);
+
 BTM_Region *BTM_GetRegionForRix(BTM_World *wrl, int rix);
 BTM_Region *BTM_LookupRegionForRix(BTM_World *wrl, int rix);
 
@@ -162,6 +171,7 @@ int BTM_RaycastTryAddHitCix1(BTM_World *wrl, u64 rcix, int nrcnt)
 
 int BTM_RaycastTryAddHitCix(BTM_World *wrl, u64 cix)
 {
+	u64 cix1, cix2;
 	int i, to;
 	if(cix==wrl->scr_hpred)
 		return(0);
@@ -171,10 +181,13 @@ int BTM_RaycastTryAddHitCix(BTM_World *wrl, u64 cix)
 	to=64;
 
 #ifdef _WIN32
-	to=255;
+//	to=255;
+	to=127;
 #endif
 
 	i=BTM_RaycastTryAddHitCix1(wrl, cix, to);
+
+#if 0
 	i+=BTM_RaycastTryAddHitCix1(wrl, cix+1ULL, to);
 	i+=BTM_RaycastTryAddHitCix1(wrl, cix-1ULL, to);
 //	i+=BTM_RaycastTryAddHitCix1(wrl, cix+(1ULL<<24), to);
@@ -182,10 +195,40 @@ int BTM_RaycastTryAddHitCix(BTM_World *wrl, u64 cix)
 //	i+=BTM_RaycastTryAddHitCix1(wrl, cix+(1ULL<<48), to);
 //	i+=BTM_RaycastTryAddHitCix1(wrl, cix-(1ULL<<48), to);
 
-	i+=BTM_RaycastTryAddHitCix1(wrl, cix+(1ULL<<7), to);
-	i+=BTM_RaycastTryAddHitCix1(wrl, cix-(1ULL<<7), to);
-	i+=BTM_RaycastTryAddHitCix1(wrl, cix+(1ULL<<14), to);
-	i+=BTM_RaycastTryAddHitCix1(wrl, cix-(1ULL<<14), to);
+//	i+=BTM_RaycastTryAddHitCix1(wrl, cix+(1ULL<<7), to);
+//	i+=BTM_RaycastTryAddHitCix1(wrl, cix-(1ULL<<7), to);
+//	i+=BTM_RaycastTryAddHitCix1(wrl, cix+(1ULL<<14), to);
+//	i+=BTM_RaycastTryAddHitCix1(wrl, cix-(1ULL<<14), to);
+
+	i+=BTM_RaycastTryAddHitCix1(wrl, cix+(1ULL<<4), to);
+	i+=BTM_RaycastTryAddHitCix1(wrl, cix-(1ULL<<4), to);
+	i+=BTM_RaycastTryAddHitCix1(wrl, cix+(1ULL<<8), to);
+	i+=BTM_RaycastTryAddHitCix1(wrl, cix-(1ULL<<8), to);
+#endif
+
+#if 1
+//	cix1=BTM_BlockOffsetRcix(cix,  1, 0, 0);
+//	cix2=BTM_BlockOffsetRcix(cix, -1, 0, 0);
+	cix1=BTM_BlockOffsetRcixPx1(cix);
+	cix2=BTM_BlockOffsetRcixNx1(cix);
+	i+=BTM_RaycastTryAddHitCix1(wrl, cix1, to);
+	i+=BTM_RaycastTryAddHitCix1(wrl, cix2, to);
+
+//	cix1=BTM_BlockOffsetRcix(cix, 0,  1, 0);
+//	cix2=BTM_BlockOffsetRcix(cix, 0, -1, 0);
+	cix1=BTM_BlockOffsetRcixPy1(cix);
+	cix2=BTM_BlockOffsetRcixNy1(cix);
+	i+=BTM_RaycastTryAddHitCix1(wrl, cix1, to);
+	i+=BTM_RaycastTryAddHitCix1(wrl, cix2, to);
+
+//	cix1=BTM_BlockOffsetRcix(cix, 0, 0,  1);
+//	cix2=BTM_BlockOffsetRcix(cix, 0, 0, -1);
+	cix1=BTM_BlockOffsetRcixPz1(cix);
+	cix2=BTM_BlockOffsetRcixNz1(cix);
+	i+=BTM_RaycastTryAddHitCix1(wrl, cix1, to);
+	i+=BTM_RaycastTryAddHitCix1(wrl, cix2, to);
+#endif
+
 	return(i);
 }
 

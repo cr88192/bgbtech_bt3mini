@@ -207,6 +207,16 @@ typedef int64_t	s64;
 #define BTM_UITY_PERCENT100		0x0100	//0..100 -> 0% .. 100%
 #define BTM_UITY_PERCENT256		0x0200	//00..FF -> 0% .. 100%
 
+#ifdef __BJX2__
+#define BTM_TARGET_SMALL
+#define BTM_TARGET_DRAWDIST	28
+#endif
+
+#ifndef BTM_TARGET_DRAWDIST
+#define BTM_TARGET_DRAWDIST	128
+#endif
+
+
 
 typedef u16		btmra_rastpixel;
 typedef u16		btmra_zbufpixel;
@@ -219,6 +229,13 @@ typedef struct BTM_TexImg_s BTM_TexImg;
 typedef struct BTM_MobEntity_s BTM_MobEntity;
 typedef struct BTM_MobSprite_s BTM_MobSprite;
 
+#ifdef BTM_TARGET_SMALL
+
+#define	BTM_RAYCAST_MAXHITS		16384
+#define	BTM_RAYCAST_HASHSZ		256
+
+#else
+
 // #define	BTM_RAYCAST_MAXHITS		16384
 // #define	BTM_RAYCAST_MAXHITS		32768
 // #define	BTM_RAYCAST_MAXHITS		65536
@@ -226,6 +243,8 @@ typedef struct BTM_MobSprite_s BTM_MobSprite;
 #define	BTM_RAYCAST_MAXHITS			262144
 // #define	BTM_RAYCAST_HASHSZ			1024
 #define	BTM_RAYCAST_HASHSZ			4096
+
+#endif
 
 struct BTM_World_s {
 // u32		*vox;
@@ -242,6 +261,7 @@ u64 tg_curseed;
 BTM_Region	*region;
 BTM_Region	*free_region;
 
+BTM_Region	*rgn_guess;
 BTM_Region	*rgn_luhash[64];
 
 u32	magic2;
@@ -361,6 +381,7 @@ int			img_lnzcell;
 
 byte		voxbm_n;		//voxel bitmap, num blocks (0 if flat)
 byte		dirty;
+byte		useflag;		//access / use flags
 
 BCCX_Node		*static_ent_tree;
 BTM_MobEntity	*live_entity;
@@ -449,6 +470,18 @@ int				spr_seq;
 int				spr_frame;
 };
 
+typedef struct BTM_ConCmd_s BTM_ConCmd;
+
+struct BTM_ConCmd_s {
+BTM_ConCmd	*next;
+char		*name;
+int			(*Run)(BTM_ConCmd *cmd, char **args);
+void		*cvar;
+byte		cvty;	//type (storage)
+byte		uity;	//UI subtype.
+byte		flag;
+};
+
 #define		btm_malloc(sz)	btm_malloc_lln(sz, __FILE__, __LINE__)
 #define		btm_realloc(ptr, sz)	btm_realloc_lln(ptr, sz, __FILE__, __LINE__)
 
@@ -487,5 +520,10 @@ typedef struct {
 	u32 dwMagic;
 	BTMGL_DDS_HEADER head;
 } BTMGL_DDS_FILEHEADER;
+
+#include "btm_tkmod.h"
+
+char *BTM_CvarGetStr(char *name);
+int BTM_CvarSetStr(char *name, char *val);
 
 #endif

@@ -210,6 +210,11 @@ I_FinishUpdate_ScanCopyVf:
 	RTSU
 };
 
+int I_BeginFrame(u16 *fbuf, int xs, int ys)
+{
+	return(0);
+}
+
 int I_SystemFrame(u16 *fbuf, int xs, int ys)
 {
 	u64 *ct, *cte, ct1, *cs0, *cs1, *cs2, *cs3;
@@ -524,6 +529,8 @@ int BTMGL_DrawSkybox()
 // float cam_ang_pitch;
 // float cam_org[3];
 byte btm_noclip;
+byte btm_mlook;
+byte btm_lmlook;
 
 static float btm_skycolor[24*3]={
 0.7, 0.3, 0.2,		//0600
@@ -852,6 +859,7 @@ int btm_raythreadproc(void *ptr)
 int main(int argc, char *argv[])
 {
 	char tb[256];
+	float tv0[3], tv1[3];
 	TKRA_Context *ractx;
 	BTM_World *wrl;
 	BTM_MobEntity *mob;
@@ -869,6 +877,7 @@ int main(int argc, char *argv[])
 	u64 wpos;
 	u32 tblk;
 	int x, y, z, xs, ys, txs, tys;
+	int mx, my, mb, lmb;
 	int afrac, astep, mdl_ntris;
 	int i, j, k, l;
 	float f0, f1, f2, f3;
@@ -879,6 +888,14 @@ int main(int argc, char *argv[])
 	BTM_ConAddCmdVar("noclip", BTM_ConCmd_Noclip, &btm_noclip, 0x3F);
 	BTM_ConAddCommand("time", BTM_ConCmd_Time);
 	BTM_ConAddCommand("instance", BTM_ConCmd_Instance);
+
+	BTM_ConAddCvar("r_drawdist", &btm_drawdist, 0);
+	BTM_ConAddCvar("mlook", &btm_mlook, 0x3F);
+
+	BTM_ConAddCvar("vol_sfx", &tkm_vol_sfx,
+		BTM_UITY_PERCENT256|BTM_CVTY_UBYTE);
+	BTM_ConAddCvar("vol_music", &tkm_vol_music,
+		BTM_UITY_PERCENT256|BTM_CVTY_UBYTE);
 
 	I_SystemInit();
 	BTM_PGL_InitOpenGlFuncs();
@@ -915,8 +932,8 @@ int main(int argc, char *argv[])
 //	btmgl_filter_min=GL_NEAREST_MIPMAP_NEAREST;
 	btmgl_filter_min=GL_NEAREST_MIPMAP_LINEAR;
 //	btmgl_filter_min=GL_LINEAR_MIPMAP_NEAREST;
-//	btmgl_filter_max=GL_NEAREST;
-	btmgl_filter_max=GL_LINEAR;
+	btmgl_filter_max=GL_NEAREST;
+//	btmgl_filter_max=GL_LINEAR;
 
 #if 1
 	skybox_tex_stars=1;
@@ -965,7 +982,8 @@ int main(int argc, char *argv[])
 //	}
 
 //	btm_drawdist=96;
-	btm_drawdist=128;
+//	btm_drawdist=128;
+	btm_drawdist=BTM_TARGET_DRAWDIST;
 //	btm_drawdist=192;
 
 	BTM_RaycastInitTables();
@@ -1070,11 +1088,18 @@ int main(int argc, char *argv[])
 	
 	if(wrl->cam_flags&1)
 		btm_noclip=1;
+	if(wrl->cam_flags&2)
+		btm_mlook=1;
+
+//	BTM_PlaySong("music/PiTink1.mod");
+	BTM_PlaySong("music/Life2.mod");
+//	BTM_PlaySong("music/musix-shine.mod");
 
 #ifdef BTM_RAYTHREAD
 	thThread(btm_raythreadproc, wrl);
 #endif
 
+	mb=0;
 
 	wrldt=0;
 	tt=I_TimeMS();
@@ -1127,21 +1152,47 @@ int main(int argc, char *argv[])
 		if(I_KeyDown(K_ESC) && !I_KeyDownL(K_ESC))
 		{
 			BTM_ToggleMenu();
+			BTM_PlaySample("sound/player/step.wav", 64);
 		}
 		
 		BTM_MenuDoInput(dt);
 		BTM_ConDoInput(dt);
 		BTM_InvenDoInput(dt);
+		BTM_DoMixSamples(dt);
+
+		lmb=mb;
+		GfxDrv_MouseGetPos(&mx, &my, &mb);
 
 		BTM_InterpolateDaySky(wrl);
 
-		wrl->cam_flags&=~1;
+		wrl->cam_flags&=~3;
 		if(btm_noclip)
 			wrl->cam_flags|=1;
+		if(btm_mlook)
+			wrl->cam_flags|=2;
 
 		if(!BTM_MenuDownP() && !BTM_ConDownP() && !BTM_InvenOpenP())
 		{
 			wrl->daytimer+=dt;
+		
+//			if(mb&2)
+			if(btm_mlook)
+			{
+//				if(lmb&2)
+				if(btm_lmlook)
+				{
+					cam_ang_yaw+=mx*0.5;
+					cam_ang_pitch-=my*0.5;
+				}
+				GfxDrv_MouseSetPos(0, 0);
+			}
+
+			if((mb&2) && !(lmb&2))
+			{
+				btm_mlook=!btm_mlook;
+			}
+			
+			btm_lmlook=btm_mlook;
 		
 			if(I_KeyDown('\\'))
 			{
@@ -1164,7 +1215,8 @@ int main(int argc, char *argv[])
 				wrl->sel_bt=(wrl->sel_bt+1)&255;
 			}
 
-			if(I_KeyDown(K_INS) && !I_KeyDownL(K_INS))
+			if((I_KeyDown(K_INS) && !I_KeyDownL(K_INS)) ||
+				((mb&4) && !(lmb&4)))
 			{
 				if(wrl->scr_lahit && (wrl->sel_bt>=4))
 				{
@@ -1205,7 +1257,8 @@ int main(int argc, char *argv[])
 			}
 
 	//		if(I_KeyDown(K_DEL) && !I_KeyDownL(K_DEL))
-			if(I_KeyDown(K_BACKSPACE) && !I_KeyDownL(K_BACKSPACE))
+			if((I_KeyDown(K_BACKSPACE) && !I_KeyDownL(K_BACKSPACE)) ||
+				((mb&1) && !(lmb&1)))
 			{
 				if(wrl->scr_lhit)
 				{
@@ -1230,7 +1283,7 @@ int main(int argc, char *argv[])
 				BTMGL_UnlockWorld();
 			}
 
-			if(!I_KeyDown(K_SHIFT))
+			if(!I_KeyDown(K_SHIFT) && !btm_mlook)
 			{
 				if(I_KeyDown(K_LEFTARROW))
 					cam_ang_yaw-=dt*(90/1000.0);
@@ -1250,16 +1303,43 @@ int main(int argc, char *argv[])
 				if(I_KeyDown(K_END))
 					cam_org[2]-=dt*(12/1000.0);
 
-				if(I_KeyDown(K_UPARROW))
+				if(I_KeyDown(K_UPARROW) ||
+						I_KeyDown('w') ||
+						I_KeyDown('W'))
 				{
 					cam_org[0]+=dt*(12/1000.0)*sin(cam_ang_yaw*(M_PI/180));
 					cam_org[1]-=dt*(12/1000.0)*cos(cam_ang_yaw*(M_PI/180));
 				}
-				if(I_KeyDown(K_DOWNARROW))
+				if(I_KeyDown(K_DOWNARROW) ||
+						I_KeyDown('s') ||
+						I_KeyDown('S'))
 				{
 					cam_org[0]-=dt*(12/1000.0)*sin(cam_ang_yaw*(M_PI/180));
 					cam_org[1]+=dt*(12/1000.0)*cos(cam_ang_yaw*(M_PI/180));
 				}
+				
+				if(I_KeyDown(K_SHIFT) || btm_lmlook)
+				{
+					if(I_KeyDown(K_LEFTARROW) ||
+						I_KeyDown('a') ||
+						I_KeyDown('A'))
+					{
+						cam_org[0]-=dt*(12/1000.0)*
+							cos(cam_ang_yaw*(M_PI/180));
+						cam_org[1]-=dt*(12/1000.0)*
+							sin(cam_ang_yaw*(M_PI/180));
+					}
+					if(I_KeyDown(K_RIGHTARROW) ||
+						I_KeyDown('d') ||
+						I_KeyDown('D'))
+					{
+						cam_org[0]+=dt*(12/1000.0)*
+							cos(cam_ang_yaw*(M_PI/180));
+						cam_org[1]+=dt*(12/1000.0)*
+							sin(cam_ang_yaw*(M_PI/180));
+					}
+				}
+
 			}else
 			{
 				cam_ivel[0]=0;
@@ -1289,6 +1369,8 @@ int main(int argc, char *argv[])
 				{
 					if(cam_mvflags&1)
 					{
+						BTM_PlaySample("sound/player/jump1.wav", 64);
+
 						if(cam_vel[2]<0)
 							cam_vel[2]=0;
 						cam_vel[2]+=6;
@@ -1307,38 +1389,46 @@ int main(int argc, char *argv[])
 
 				if(I_KeyDown(K_SHIFT))
 				{
-					if(I_KeyDown(K_UPARROW))
+					if(I_KeyDown(K_UPARROW) ||
+						I_KeyDown('W'))
 					{
 						cam_ivel[0]= 14*sin(cam_ang_yaw*(M_PI/180));
 						cam_ivel[1]=-14*cos(cam_ang_yaw*(M_PI/180));
 					}
-					if(I_KeyDown(K_DOWNARROW))
+					if(I_KeyDown(K_DOWNARROW) ||
+						I_KeyDown('S'))
 					{
 						cam_ivel[0]=-14*sin(cam_ang_yaw*(M_PI/180));
 						cam_ivel[1]= 14*cos(cam_ang_yaw*(M_PI/180));
 					}
 				}else
 				{
-					if(I_KeyDown(K_UPARROW))
+					if(I_KeyDown(K_UPARROW) ||
+						I_KeyDown('w'))
 					{
 						cam_ivel[0]= 7*sin(cam_ang_yaw*(M_PI/180));
 						cam_ivel[1]=-7*cos(cam_ang_yaw*(M_PI/180));
 					}
-					if(I_KeyDown(K_DOWNARROW))
+					if(I_KeyDown(K_DOWNARROW) ||
+						I_KeyDown('s'))
 					{
 						cam_ivel[0]=-7*sin(cam_ang_yaw*(M_PI/180));
 						cam_ivel[1]= 7*cos(cam_ang_yaw*(M_PI/180));
 					}
 				}
 				
-				if(I_KeyDown(K_SHIFT))
+				if(I_KeyDown(K_SHIFT) || btm_lmlook)
 				{
-					if(I_KeyDown(K_LEFTARROW))
+					if(I_KeyDown(K_LEFTARROW) ||
+						I_KeyDown('a') ||
+						I_KeyDown('A'))
 					{
 						cam_ivel[0]=-7*cos(cam_ang_yaw*(M_PI/180));
 						cam_ivel[1]=-7*sin(cam_ang_yaw*(M_PI/180));
 					}
-					if(I_KeyDown(K_RIGHTARROW))
+					if(I_KeyDown(K_RIGHTARROW) ||
+						I_KeyDown('d') ||
+						I_KeyDown('D'))
 					{
 						cam_ivel[0]= 7*cos(cam_ang_yaw*(M_PI/180));
 						cam_ivel[1]= 7*sin(cam_ang_yaw*(M_PI/180));
@@ -1357,26 +1447,42 @@ int main(int argc, char *argv[])
 				if(TKRA_Vec3F_DotProduct(cam_vel, cam_vel)<0.2)
 					frc=0;
 
+				TKRA_Vec3F_Normalize(cam_vel, tv0);
+				f0=TKRA_Vec3F_Normalize(cam_ivel, tv1);
+				f2=TKRA_Vec3F_DotProduct(tv0, tv1);
+
 				if(cam_mvflags&1)
 				{
-					f0=TKRA_Vec3F_DotProduct(cam_vel, cam_ivel);
-					f1=TKRA_Vec3F_DotProduct(cam_vel, cam_vel)+0.01;
-					f2=f0/f1;
+//					f0=TKRA_Vec3F_DotProduct(cam_vel, cam_ivel);
+//					f1=TKRA_Vec3F_DotProduct(cam_vel, cam_vel)+0.01;
+//					f2=f0/f1;
 				
-					if(f2<=0.9)
+//					if(f2<=0.9)
+//					if(f2<=0.7)
+					if(f2<=0.8)
+//					if(f2<=0.3)
+//					if(f0<1.0)
 					{
 						cam_vel[0]*=frc;
 						cam_vel[1]*=frc;
 	//					TKRA_Vec3F_Scale(cam_vel, frc, cam_vel);
+					}else
+					{
+						f3=sqrt(f2);
+//						cam_vel[0]*=f2;
+//						cam_vel[1]*=f2;
+						cam_vel[0]*=f3;
+						cam_vel[1]*=f3;
 					}
 				}else
 					if(cam_mvflags&2)
 				{
-					f0=TKRA_Vec3F_DotProduct(cam_vel, cam_ivel);
-					f1=TKRA_Vec3F_DotProduct(cam_vel, cam_vel)+0.01;
-					f2=f0/f1;
+//					f0=TKRA_Vec3F_DotProduct(cam_vel, cam_ivel);
+//					f1=TKRA_Vec3F_DotProduct(cam_vel, cam_vel)+0.01;
+//					f2=f0/f1;
 				
 					if(f2<=0.9)
+//					if(f2<=0.3)
 					{
 						cam_vel[0]*=frc;
 						cam_vel[1]*=frc;
@@ -1495,6 +1601,10 @@ int main(int argc, char *argv[])
 			((u64)((u32)(cam_org[0]*256)&0xFFFFFFU)<< 0) |
 			((u64)((u32)(cam_org[1]*256)&0xFFFFFFU)<<24) |
 			((u64)((u32)(cam_org[2]*256)&0x00FFFFU)<<48) ;
+		
+		BTM_SoundSetVpos(
+			wrl->cam_org,
+			wrl->cam_yaw, wrl->cam_pitch);
 		
 #ifndef BTM_RAYTHREAD
 		BTM_RayTick(wrl, dt);

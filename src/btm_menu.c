@@ -324,7 +324,7 @@ int BTM_LoadMenu(char *fname)
 	BTM_Menu *menu;
 	BCCX_Node *root, *n1;
 	BCCX_Node *c;
-	char *buf, *s1;
+	char *buf, *s1, *s2;
 	int sz, sz1;
 	int na, ci;
 	
@@ -338,7 +338,8 @@ int BTM_LoadMenu(char *fname)
 	root=BCCX_ParseExprStr(buf);
 	BCCX_MarkTreeZone(root, BCCX_ZTY_GLOBAL);
 
-	if(BCCX_TagIsP(root, "loadfiles"))
+	if(BCCX_TagIsP(root, "loadfiles") ||
+		BCCX_TagIsP(root, "config"))
 	{
 		na=BCCX_GetNodeChildCount(root);
 		for(ci=0; ci<na; ci++)
@@ -355,6 +356,20 @@ int BTM_LoadMenu(char *fname)
 				}
 			}
 
+			if(BCCX_TagIsP(c, "setcvar"))
+			{
+				s1=BCCX_Get(c, "name");
+				s2=BCCX_Get(c, "value");
+				BTM_CvarSetStr(s1, s2);
+			}
+
+			if(	BCCX_TagIsP(c, "global") ||
+				BCCX_TagIsP(c, "player") ||
+				BCCX_TagIsP(c, "inven") ||
+				BCCX_TagIsP(c, "concmd"))
+			{
+				BTM_SpawnWorldGlobal(btm_wrl, c);
+			}
 		}
 		return(0);
 	}

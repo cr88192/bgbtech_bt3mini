@@ -21,6 +21,8 @@ BTM_MobSprite	* volatile btm_freesprites;
 BTM_MobSprite	* volatile btm_buildsprites;
 void * volatile btm_sprite_mutex;
 
+BTM_ConCmd	*btm_concmds;
+
 int BTM_LockSprites()
 {
 	if(!btm_sprite_mutex)
@@ -730,7 +732,7 @@ int BTM_RunSpawnerForEntity(BTM_World *wrl,
 	if(!strcmp(mob->cname, "sheep"))
 	{
 		mob->Tick=BTM_RunTickMobBasic;
-		mob->spr_base="cow1";
+		mob->spr_base="sheep1";
 		mob->spr_dxs=2;
 		mob->spr_dzs=2;
 	}
@@ -804,6 +806,7 @@ bccx_cxstate	bccx_inven;
 bccx_cxstate	bccx_index;
 bccx_cxstate	bccx_count;
 bccx_cxstate	bccx_item;
+bccx_cxstate	bccx_setcvar;
 
 int BTM_MobBindVarInt(BTM_MobEntity *mob, char *name, s64 val)
 {
@@ -1065,7 +1068,7 @@ int BTM_SpawnWorldGlobal(BTM_World *wrl, BCCX_Node *ent)
 {
 	double org[3];
 	BCCX_Node *tn1, *tn2, *tn3;
-	char *name, *str;
+	char *name, *str, *s1, *s2;
 	s64 li, cpos;
 	double lf;
 	int ani, vx, vy, vz, na, ci, ix, cn, it;
@@ -1134,6 +1137,30 @@ int BTM_SpawnWorldGlobal(BTM_World *wrl, BCCX_Node *ent)
 			{ wrl->cam_inven[ix]=it|((cn-1)<<16); }
 		else
 			{ wrl->cam_inven[ix]=0; }
+
+		return(0);
+	}
+
+	if(BCCX_TagIsP(ent, "setcvar"))
+	{
+		s1=BCCX_Get(ent, "name");
+		s2=BCCX_Get(ent, "value");
+		BTM_CvarSetStr(s1, s2);
+		return(0);
+	}
+
+	if(BCCX_TagIsP(ent, "concmd"))
+	{
+		s2=BCCX_Get(ent, "text");
+		BTM_ConsoleCommand(s2);
+		return(0);
+	}
+
+	if(BCCX_TagIsP(ent, "conecho"))
+	{
+		s2=BCCX_Get(ent, "text");
+		BTM_ConPuts(s2);
+		return(0);
 	}
 
 	return(-1);
@@ -1161,7 +1188,8 @@ BCCX_Node *BTM_FlattenWorldGlobalState(BTM_World *wrl)
 {
 	BCCX_Node *ntmp, *elst;
 	BCCX_AttrVal *av;
-	char *str;
+	BTM_ConCmd *cvar;
+	char *str, *s0, *s1;
 	int vx, vy, vz;
 	int i, j, k, ix;
 
@@ -1187,6 +1215,11 @@ BCCX_Node *BTM_FlattenWorldGlobalState(BTM_World *wrl)
 		BCCX_SetIntCst(ntmp, &bccx_day, "day", wrl->day);
 		
 		BCCX_Add(elst, ntmp);
+
+
+		ntmp=BCCX_NewCst(&bccx_player, "setcvar");
+		BCCX_SetCst(ntmp, &bccx_name, "name", "r_drawdist");
+		BCCX_SetIntCst(ntmp, &bccx_name, "value", btm_drawdist);
 	}
 
 	for(i=0; i<wrl->tgen_vargbl_cnt; i++)
@@ -1214,6 +1247,23 @@ BCCX_Node *BTM_FlattenWorldGlobalState(BTM_World *wrl)
 		}
 
 		BCCX_Add(elst, ntmp);
+	}
+	
+	cvar=btm_concmds;
+	while(cvar)
+	{
+		if(cvar->cvar && !(cvar->flag&1))
+		{
+			s0=cvar->name;
+			s1=BTM_CvarGetStr(s0);
+
+			ntmp=BCCX_NewCst(&bccx_setcvar, "setcvar");
+			BCCX_SetCst(ntmp, &bccx_name, "name", s0);
+			BCCX_SetCst(ntmp, &bccx_value, "value", s1);
+			BCCX_Add(elst, ntmp);
+		}
+	
+		cvar=cvar->next;
 	}
 	
 #if 0

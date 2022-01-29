@@ -685,12 +685,22 @@ BTM_Region *BTM_LookupRegionForRix(BTM_World *wrl, int rix)
 {
 	BTM_Region *rgn;
 	int h;
-	
+
+	rgn=wrl->rgn_guess;
+	if(rgn && (rgn->rgnix==rix))
+	{
+//		BTM_ValidateRegionMagics(wrl, rgn);
+		rgn->useflag|=2;
+		return(rgn);
+	}
+
 	h=((rix*65521)>>16)&63;
 	rgn=wrl->rgn_luhash[h];
 	if(rgn && (rgn->rgnix==rix))
 	{
-		BTM_ValidateRegionMagics(wrl, rgn);
+//		BTM_ValidateRegionMagics(wrl, rgn);
+		wrl->rgn_guess=rgn;
+		rgn->useflag|=2;
 		return(rgn);
 	}
 	
@@ -701,6 +711,8 @@ BTM_Region *BTM_LookupRegionForRix(BTM_World *wrl, int rix)
 		if(rgn->rgnix==rix)
 		{
 			wrl->rgn_luhash[h]=rgn;
+			wrl->rgn_guess=rgn;
+			rgn->useflag|=2;
 			return(rgn);
 		}
 		rgn=rgn->next;
@@ -714,11 +726,21 @@ BTM_Region *BTM_GetRegionForRix(BTM_World *wrl, int rix)
 	BTM_Region *rgn;
 	int h;
 	
+	rgn=wrl->rgn_guess;
+	if(rgn && (rgn->rgnix==rix))
+	{
+//		BTM_ValidateRegionMagics(wrl, rgn);
+		rgn->useflag|=1;
+		return(rgn);
+	}
+	
 	h=((rix*65521)>>16)&63;
 	rgn=wrl->rgn_luhash[h];
 	if(rgn && (rgn->rgnix==rix))
 	{
-		BTM_ValidateRegionMagics(wrl, rgn);
+//		BTM_ValidateRegionMagics(wrl, rgn);
+		wrl->rgn_guess=rgn;
+		rgn->useflag|=1;
 		return(rgn);
 	}
 	
@@ -729,6 +751,8 @@ BTM_Region *BTM_GetRegionForRix(BTM_World *wrl, int rix)
 		if(rgn->rgnix==rix)
 		{
 			wrl->rgn_luhash[h]=rgn;
+			wrl->rgn_guess=rgn;
+			rgn->useflag|=1;
 			return(rgn);
 		}
 		rgn=rgn->next;
@@ -750,6 +774,9 @@ BTM_Region *BTM_GetRegionForRix(BTM_World *wrl, int rix)
 	wrl->region=rgn;
 
 	BTM_TryLoadRegionImage(wrl, rgn);
+
+	wrl->rgn_luhash[h]=rgn;
+	wrl->rgn_guess=rgn;
 
 	return(rgn);
 }
@@ -1784,8 +1811,8 @@ int BTM_CheckUnloadRegions(BTM_World *wrl)
 		BCCX_ClearZoneLevel(BCCX_ZTY_REDUCE);
 	}
 
-	uld=(2*btm_drawdist);
-//	uld=(1.5*btm_drawdist);
+//	uld=(2*btm_drawdist);
+	uld=(1.5*btm_drawdist);
 	if(uld<192)
 		uld=192;
 
@@ -1817,7 +1844,8 @@ int BTM_CheckUnloadRegions(BTM_World *wrl)
 //		if(d>=384)
 //		if(d>=192)
 //		if((d>=244) || (rt<0))
-		if((d>=uld) || (rt<0))
+//		if((d>=uld) || (rt<0))
+		if(((d>=uld) && !(rcur->useflag&1)) || (rt<0))
 //		if(d>=448)
 //		if(d>=512)
 		{
@@ -1837,12 +1865,14 @@ int BTM_CheckUnloadRegions(BTM_World *wrl)
 	
 	for(d=0; d<64; d++)
 		wrl->rgn_luhash[d]=NULL;
+	wrl->rgn_guess=NULL;
 	
 	wrl->region=NULL;
 	rcur=rklst;
 	while(rcur)
 	{
 		BTM_ValidateRegionMagics(wrl, rcur);
+		rcur->useflag&=~7;
 		rcur->next=wrl->region;
 		wrl->region=rcur;
 		rcur=rcur->unext;

@@ -10,6 +10,9 @@
 	<menu name="options" title="Options">
 		<option text="Back" gosubname="main"/>
 		<option text="Noclip" cvar="noclip"/>
+		<option text="Mouse Look" cvar="mlook"/>
+		<option text="Sound Volume" cvar="vol_sfx"/>
+		<option text="Music Volume" cvar="vol_music"/>
 		<option text="Option 2"/>
 		<option text="Option 3"/>
 		<option text="Dialog Test 1" gosubname="dialog1"/>

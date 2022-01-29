@@ -458,8 +458,21 @@ u64 BTM_ConvRixToBlkPosCenter(int rix)
 
 u64 BTM_BlockOffsetRcix(u64 rcix, int dx, int dy, int dz)
 {
-	u64 bpos, rcix1;
+	u64 bpos, rcix1, rcix2, rcix3;
 	int cx, cy, cz;
+
+#ifndef BTM_RCIX_MORTON
+	rcix1=rcix+dx;
+	rcix2=rcix1+(dy<<4);
+	rcix3=rcix2+(dz<<8);
+	if(	((rcix1&(~  15))==(rcix&(~  15))) &&
+		((rcix2&(~ 255))==(rcix&(~ 255))) &&
+		((rcix3&(~4095))==(rcix&(~4095))) )
+	{
+		return(rcix3);
+	}
+#endif
+
 
 	bpos=BTM_ConvRcixToBlkPos(rcix);
 	cx=(bpos>>0)&65535;
@@ -468,6 +481,72 @@ u64 BTM_BlockOffsetRcix(u64 rcix, int dx, int dy, int dz)
 	
 	rcix1=BTM_BlockCoordsToRcix(cx+dx, cy+dy, cz+dz);
 	return(rcix1);
+}
+
+u64 BTM_BlockOffsetRcixPx1(u64 rcix)
+{
+#ifndef BTM_RCIX_MORTON
+	u64 rcix1;
+	rcix1=rcix+1;
+	if((rcix1&(~  15))==(rcix&(~  15)))
+		return(rcix1);
+#endif
+	return(BTM_BlockOffsetRcix(rcix, 1, 0, 0));
+}
+
+u64 BTM_BlockOffsetRcixNx1(u64 rcix)
+{
+#ifndef BTM_RCIX_MORTON
+	u64 rcix1;
+	rcix1=rcix-1;
+	if((rcix1&(~  15))==(rcix&(~  15)))
+		return(rcix1);
+#endif
+	return(BTM_BlockOffsetRcix(rcix, -1, 0, 0));
+}
+
+u64 BTM_BlockOffsetRcixPy1(u64 rcix)
+{
+#ifndef BTM_RCIX_MORTON
+	u64 rcix1;
+	rcix1=rcix+(1<<4);
+	if((rcix1&(~ 255))==(rcix&(~ 255)))
+		return(rcix1);
+#endif
+	return(BTM_BlockOffsetRcix(rcix, 0, 1, 0));
+}
+
+u64 BTM_BlockOffsetRcixNy1(u64 rcix)
+{
+#ifndef BTM_RCIX_MORTON
+	u64 rcix1;
+	rcix1=rcix-(1<<4);
+	if((rcix1&(~ 255))==(rcix&(~ 255)))
+		return(rcix1);
+#endif
+	return(BTM_BlockOffsetRcix(rcix, 0, -1, 0));
+}
+
+u64 BTM_BlockOffsetRcixPz1(u64 rcix)
+{
+#ifndef BTM_RCIX_MORTON
+	u64 rcix1;
+	rcix1=rcix+(1<<8);
+	if((rcix1&(~4095))==(rcix&(~4095)))
+		return(rcix1);
+#endif
+	return(BTM_BlockOffsetRcix(rcix, 0, 0, 1));
+}
+
+u64 BTM_BlockOffsetRcixNz1(u64 rcix)
+{
+#ifndef BTM_RCIX_MORTON
+	u64 rcix1;
+	rcix1=rcix-(1<<8);
+	if((rcix1&(~4095))==(rcix&(~4095)))
+		return(rcix1);
+#endif
+	return(BTM_BlockOffsetRcix(rcix, 0, 0, -1));
 }
 
 u64 BTM_ConvCorgToBlkPos(u64 cpos)
@@ -1240,7 +1319,7 @@ int BTMGL_EmitBlockFaces(int cx, int cy, int cz, int fm, u32 blk,
 	bt=blk&255;
 	if(bt<4)
 		return(0);
-	if(bt==0x22)
+	if(bt==BTM_BLKTY_SKY1)
 		return(0);
 	
 	if(!(fm&0x80))
@@ -1274,10 +1353,10 @@ int BTMGL_EmitBlockFaces(int cx, int cy, int cz, int fm, u32 blk,
 
 	
 	tx=(binf>> 0)&15;	ty=15-((binf>>4)&15);
-	sta[0]=(tx+0)*(1.0/16)+(1.0/512);	sta[1]=1.0-(1.0/512)-(ty+0)*(1.0/16);
-	sta[2]=(tx+1)*(1.0/16)-(1.0/512);	sta[3]=1.0-(1.0/512)-(ty+0)*(1.0/16);
-	sta[4]=(tx+0)*(1.0/16)+(1.0/512);	sta[5]=1.0+(1.0/512)-(ty+1)*(1.0/16);
-	sta[6]=(tx+1)*(1.0/16)-(1.0/512);	sta[7]=1.0+(1.0/512)-(ty+1)*(1.0/16);
+	sta[0]=(tx+0)*(1.0/16)+(1.0/2048);	sta[1]=1.0-(1.0/2048)-(ty+0)*(1.0/16);
+	sta[2]=(tx+1)*(1.0/16)-(1.0/2048);	sta[3]=1.0-(1.0/2048)-(ty+0)*(1.0/16);
+	sta[4]=(tx+0)*(1.0/16)+(1.0/2048);	sta[5]=1.0+(1.0/2048)-(ty+1)*(1.0/16);
+	sta[6]=(tx+1)*(1.0/16)-(1.0/2048);	sta[7]=1.0+(1.0/2048)-(ty+1)*(1.0/16);
 
 	if(((binf>>8)&0xFF) == (binf&0xFF))
 	{
@@ -1286,16 +1365,24 @@ int BTMGL_EmitBlockFaces(int cx, int cy, int cz, int fm, u32 blk,
 	}else
 	{
 		tx=(binf>> 8)&15;	ty=15-((binf>>12)&15);
-		sta[ 8]=(tx+0)*(1.0/16)+(1.0/256);	sta[ 9]=(ty+0)*(1.0/16)+(1.0/256);
-		sta[10]=(tx+1)*(1.0/16)-(1.0/256);	sta[11]=(ty+0)*(1.0/16)+(1.0/256);
-		sta[12]=(tx+0)*(1.0/16)+(1.0/256);	sta[13]=(ty+1)*(1.0/16)-(1.0/256);
-		sta[14]=(tx+1)*(1.0/16)-(1.0/256);	sta[15]=(ty+1)*(1.0/16)-(1.0/256);
+		sta[ 8]=(tx+0)*(1.0/16)+(1.0/2048);
+		sta[ 9]=(ty+0)*(1.0/16)+(1.0/2048);
+		sta[10]=(tx+1)*(1.0/16)-(1.0/2048);
+		sta[11]=(ty+0)*(1.0/16)+(1.0/2048);
+		sta[12]=(tx+0)*(1.0/16)+(1.0/2048);
+		sta[13]=(ty+1)*(1.0/16)-(1.0/2048);
+		sta[14]=(tx+1)*(1.0/16)-(1.0/2048);
+		sta[15]=(ty+1)*(1.0/16)-(1.0/2048);
 
 		tx=(binf>>16)&15;	ty=15-((binf>>20)&15);
-		sta[16]=(tx+0)*(1.0/16)+(1.0/256);	sta[17]=(ty+0)*(1.0/16)+(1.0/256);
-		sta[18]=(tx+1)*(1.0/16)-(1.0/256);	sta[19]=(ty+0)*(1.0/16)+(1.0/256);
-		sta[20]=(tx+0)*(1.0/16)+(1.0/256);	sta[21]=(ty+1)*(1.0/16)-(1.0/256);
-		sta[22]=(tx+1)*(1.0/16)-(1.0/256);	sta[23]=(ty+1)*(1.0/16)-(1.0/256);
+		sta[16]=(tx+0)*(1.0/16)+(1.0/2048);
+		sta[17]=(ty+0)*(1.0/16)+(1.0/2048);
+		sta[18]=(tx+1)*(1.0/16)-(1.0/2048);
+		sta[19]=(ty+0)*(1.0/16)+(1.0/2048);
+		sta[20]=(tx+0)*(1.0/16)+(1.0/2048);
+		sta[21]=(ty+1)*(1.0/16)-(1.0/2048);
+		sta[22]=(tx+1)*(1.0/16)-(1.0/2048);
+		sta[23]=(ty+1)*(1.0/16)-(1.0/2048);
 
 		for(i=4; i<12; i++)
 		{
@@ -1358,29 +1445,6 @@ int BTMGL_EmitBlockFaces(int cx, int cy, int cz, int fm, u32 blk,
 		if(l!=0x0F)
 		{
 			rgb=BTM_ModulateColorRgbForBlockLight(rgb, l);
-
-#if 0
-			if((l>>4)==0)
-			{
-				rgb1=0xFF000000;
-
-				ma=((s32)(l<<28))>>31;
-				rgb1+=(rgb>>1)&(ma&0x007F7F7FU);
-
-//				if(l&8)
-//					rgb1+=(rgb>>1)&0x007F7F7FU;
-//				if(l&4)
-//					rgb1+=(rgb>>2)&0x003F3F3FU;
-//				if(l&2)
-//					rgb1+=(rgb>>3)&0x001F1F1FU;
-//				if(l&1)
-//					rgb1+=(rgb>>4)&0x000F0F0FU;
-//				rgb=rgb1;
-			}else
-			{
-				rgb=BTM_ModulateColorRgbForBlockLight(rgb, l);
-			}
-#endif
 		}
 
 		tri=btmgl_cube_quads+i*4;
@@ -1703,7 +1767,8 @@ int BTMGL_DrawSceneBlocks(BTM_World *wrl)
 //		lsl=0xFFFFFFFFFFFFULL;
 		blkd=btmgl_vox_atlas_side[blk&255];
 
-		if(!(blkd&(BTM_BLKDFL_SEETHRU|BTM_BLKDFL_FLUID)))
+//		if(!(blkd&(BTM_BLKDFL_SEETHRU|BTM_BLKDFL_FLUID)))
+		if(!(blkd&BTM_BLKDFL_FLUID))
 		{
 			if(vy>cy)
 	//			fm&=~1;

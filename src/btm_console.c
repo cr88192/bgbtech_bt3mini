@@ -27,17 +27,6 @@ int btm_input_x;
 short btm_con_tdt;
 short btm_con_msgdt;
 
-typedef struct BTM_ConCmd_s BTM_ConCmd;
-
-struct BTM_ConCmd_s {
-BTM_ConCmd	*next;
-char		*name;
-int			(*Run)(BTM_ConCmd *cmd, char **args);
-void		*cvar;
-byte		cvty;	//type (storage)
-byte		uity;	//UI subtype.
-};
-
 BTM_ConCmd	*btm_concmds;
 
 int BTM_ConAddCvar(char *name, void *ptr, int pty)
@@ -172,6 +161,13 @@ int BTM_ConPrintString(char *str)
 	{
 		BTM_ConPrintChar(*s++);
 	}
+	return(0);
+}
+
+int BTM_ConPuts(char *str)
+{
+	BTM_ConPrintString(str);
+	puts(str);
 	return(0);
 }
 

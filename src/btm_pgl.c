@@ -1,7 +1,13 @@
+#include <GL/gl.h>
+
 #ifdef _WIN32
 
 #define PGL_NATIVEGL
 #define BTM_RAYTHREAD
+
+#endif
+
+#ifdef __BJX2__
 
 #endif
 
