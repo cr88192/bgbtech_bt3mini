@@ -160,6 +160,20 @@ int BTM_CheckWorldMoveBBoxBlockContents(BTM_World *wrl,
 	return(0);
 }
 
+int BTM_CheckWorldMovePoint(BTM_World *wrl, float *org)
+{
+	u32 blk;
+	int cont;
+	int cx, cy, cz;
+
+	cx=floor(org[0]);
+	cy=floor(org[1]);
+	cz=floor(org[2]);
+	blk=BTM_GetWorldBlockXYZ(wrl, cx, cy, cz);
+	cont=BTM_CheckWorldMoveBlockContents(wrl, blk);
+	return(cont);
+}
+
 int BTM_CheckWorldMoveSpot(BTM_World *wrl, float *org, const float *bbox)
 {
 	int cont;
@@ -311,7 +325,7 @@ int BTM_CheckWorldBoxMoveVel(BTM_World *wrl, float dt,
 {
 	float tdo[4], tdv[4];
 	float f, g;
-	int fl, cfl;
+	int fl, cfl, cfl1;
 	int i, j, k;
 
 	f=fabs(svel[0])+fabs(svel[1])+fabs(svel[2]);
@@ -337,6 +351,8 @@ int BTM_CheckWorldBoxMoveVel(BTM_World *wrl, float dt,
 
 	if(!(cfl&1))
 	{
+		cfl1=BTM_CheckWorldMovePoint(wrl, tdo);
+	
 		if(svel[2]<0)
 			fl&=~1;
 
@@ -344,6 +360,11 @@ int BTM_CheckWorldBoxMoveVel(BTM_World *wrl, float dt,
 			fl|=2;
 		else
 			fl&=~2;
+
+		if(cfl1&2)
+			fl|=4;
+		else
+			fl&=~4;
 
 		TKRA_Vec3F_Copy(tdo, dorg);
 		TKRA_Vec3F_Copy(tdv, dvel);

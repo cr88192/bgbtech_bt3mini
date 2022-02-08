@@ -194,6 +194,27 @@ int BTM_UnlockMalloc()
 	return(0);
 }
 
+char *btm_malloc_lfnix_name[256];
+int btm_malloc_n_lfnix;
+
+void *btm_malloc_chn;
+
+int btm_malloc_lfnixforlfn(char *lfn)
+{
+	int i;
+	
+	for(i=0; i<btm_malloc_n_lfnix; i++)
+		if(!strcmp(btm_malloc_lfnix_name[i], lfn))
+			return(i);
+
+	if(i>=btm_malloc_n_lfnix)
+		return(-1);
+
+	i=btm_malloc_n_lfnix++;
+	btm_malloc_lfnix_name[i]=strdup(lfn);
+	return(i);
+}
+
 
 void *btm_malloc_lln(int sz, char *lfn, int lln)
 {
@@ -202,7 +223,10 @@ void *btm_malloc_lln(int sz, char *lfn, int lln)
 	BTM_LockMalloc();
 	printf("malloc: %d %s:%d tot=%d\n", sz, lfn, lln, btm_stat_malloc_tot);
 	btm_stat_malloc_tot+=sz;
+
+//	ptr=malloc(sz+4*sizeof(void *));
 	ptr=malloc(sz);
+	
 	BTM_UnlockMalloc();
 
 	return(ptr);
@@ -218,6 +242,11 @@ void *btm_realloc_lln(void *ptr, int sz, char *lfn, int lln)
 	BTM_UnlockMalloc();
 
 	return(ptr1);
+}
+
+void btm_free(void *ptr)
+{
+	free(ptr);
 }
 
 u64 BTM_RaycastStepVectorB(int yang, int pang)
@@ -1159,6 +1188,17 @@ static const int  btmgl_cube_quads[6*4]=
 	4, 5, 7, 6,	//+Z
 	1, 0, 2, 3	//-Z
 };
+
+static const int  btmgl_cross_quads[6*4]=
+{
+	1, 2, 6, 5, //Cross X/Y 1
+	3, 0, 4, 7, //Cross X/Y 2
+
+	3, 2, 6, 7,	//+Y
+	0, 1, 5, 4,	//-Y
+	4, 5, 7, 6,	//+Z
+	1, 0, 2, 3	//-Z
+};
 #endif
 
 
@@ -1592,7 +1632,13 @@ int BTMGL_EmitScaledBlockFaces(
 			rgb=BTM_ModulateColorRgbForBlockLight(rgb, l);
 		}
 
-		tri=btmgl_cube_quads+i*4;
+		if(fm&0x100)
+		{
+			tri=btmgl_cross_quads+i*4;
+		}else
+		{
+			tri=btmgl_cube_quads+i*4;
+		}
 		BTMGL_EmitBlockVertex(xyz+tri[0]*4, st+0*2, rgb);
 		BTMGL_EmitBlockVertex(xyz+tri[1]*4, st+1*2, rgb);
 		BTMGL_EmitBlockVertex(xyz+tri[2]*4, st+3*2, rgb);
@@ -1661,6 +1707,33 @@ int BTMGL_EmitBlockFacesStair(
 //	BTMGL_EmitBlockFaces(cx, cy, cz, 0x80|fm, blk, lbl, lsl);
 	return(0);
 }
+
+int BTMGL_EmitBlockFacesPlant(
+	int cx, int cy, int cz,
+	int fm, u32 blk,
+	u64 lbl, u64 lsl)
+{
+	u32 blkd;
+	float zofsb, zofst;
+
+	blkd=btmgl_vox_atlas_side[blk&255];
+
+	zofsb=0;
+	zofst=0;
+	
+	if((blkd&BTM_BLKDFL_TY_MASK)==BTM_BLKDFL_TY_CROP)
+	{
+		zofsb=(-0.5)+((((blk>>8)&15)+1)/16.0)*0.5;
+		zofst=(-0.9)+((((blk>>8)&15)+1)/16.0)*0.9;
+	}
+
+	BTMGL_EmitScaledBlockFaces(
+		cx+0, cy+0, cz+0+zofsb,
+		cx+1, cy+1, cz+1+zofst,
+		0x103, blk, lbl, lsl);
+	return(0);
+}
+
 
 int BTMGL_DrawSceneBlocks(BTM_World *wrl)
 {
@@ -1768,7 +1841,8 @@ int BTMGL_DrawSceneBlocks(BTM_World *wrl)
 		blkd=btmgl_vox_atlas_side[blk&255];
 
 //		if(!(blkd&(BTM_BLKDFL_SEETHRU|BTM_BLKDFL_FLUID)))
-		if(!(blkd&BTM_BLKDFL_FLUID))
+//		if(!(blkd&BTM_BLKDFL_FLUID))
+		if(!(blkd&BTM_BLKDFL_FLUID) && !(blkd&BTM_BLKDFL_TY_MASK))
 		{
 			if(vy>cy)
 	//			fm&=~1;
@@ -1850,6 +1924,12 @@ int BTMGL_DrawSceneBlocks(BTM_World *wrl)
 		}else if((blkd&BTM_BLKDFL_TY_MASK)==BTM_BLKDFL_TY_STAIR)
 		{
 			BTMGL_EmitBlockFacesStair(cx, cy, cz, fm, blk, lbl, lsl);
+		}else if((blkd&BTM_BLKDFL_TY_MASK)==BTM_BLKDFL_TY_PLANT)
+		{
+			BTMGL_EmitBlockFacesPlant(cx, cy, cz, fm, blk, lbl, lsl);
+		}else if((blkd&BTM_BLKDFL_TY_MASK)==BTM_BLKDFL_TY_CROP)
+		{
+			BTMGL_EmitBlockFacesPlant(cx, cy, cz, fm, blk, lbl, lsl);
 		}
 	}
 

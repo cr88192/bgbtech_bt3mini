@@ -20,6 +20,7 @@ byte * volatile btm_freelist_mul64k[256];
 byte * volatile btm_freelist_mul4k[256];
 byte * volatile btm_freelist_mul256b[256];
 void * volatile btm_alloc_mutex;
+void * volatile btm_alloctmp_mutex;
 
 int btm_totalloc_mul64k[256];
 int btm_totalloc_mul4k[256];
@@ -36,6 +37,20 @@ int BTM_LockAlloc()
 int BTM_UnlockAlloc()
 {
 	thUnlockMutex(btm_alloc_mutex);
+	return(0);
+}
+
+int BTM_LockAllocTmp()
+{
+	if(!btm_alloctmp_mutex)
+		btm_alloctmp_mutex=thMutex();
+	thLockMutex(btm_alloctmp_mutex);
+	return(0);
+}
+
+int BTM_UnlockAllocTmp()
+{
+	thUnlockMutex(btm_alloctmp_mutex);
 	return(0);
 }
 
@@ -141,22 +156,28 @@ int BTM_FreeMul256B(void *ptr, int n)
 	return(0);
 }
 
-byte *btm_loadtemp_buf[32];
-int btm_loadtemp_sz[32];
+byte *btm_loadtemp_buf[8*32];
+int btm_loadtemp_sz[8*32];
 int btm_loadtemp_rov;
 
 byte *BTM_AllocTempBuffer(int sz)
 {
-	int ix, sz1;
+	void *ptr;
+	int ix, sz1, tid, tix;
 
 //	if(sz<=1024)
 //	{
 //		return(bccx_ralloc(sz));
 //	}
 	
+	BTM_LockAllocTmp();
+	
+	tid=thGetThreadId();
+	
 	ix=btm_loadtemp_rov;
 	btm_loadtemp_rov=(ix+1)&15;
-	
+
+#if 1
 	if(sz>=262144)
 		{ ix=0; }
 	else if(sz>=65536)
@@ -167,6 +188,24 @@ byte *BTM_AllocTempBuffer(int sz)
 		{ ix=8|(ix&7); }
 	else
 		{ ix=16|(ix&15); }
+#endif
+
+#if 0
+	if(sz>=1048576)
+		{ ix=0; }
+	else if(sz>=262144)
+		{ ix=2|(ix&1); }
+	else if(sz>=65536)
+		{ ix=4|(ix&3); }
+	else if(sz>=16384)
+		{ ix=8|(ix&7); }
+	else
+		{ ix=16|(ix&15); }
+#endif
+
+	tix=tid^(tid>>3)^(tid>>6);
+//	ix=ix+((tid*31)&0xE0);
+	ix=ix+((tix<<5)&0xE0);
 
 	sz1=(sz+255)>>8;
 	
@@ -182,7 +221,11 @@ byte *BTM_AllocTempBuffer(int sz)
 		btm_loadtemp_sz[ix]=sz1;
 	}
 	
-	return(btm_loadtemp_buf[ix]);
+	ptr=btm_loadtemp_buf[ix];
+	
+	BTM_UnlockAllocTmp();
+	
+	return(ptr);
 }
 
 byte *BTM_LoadFileI(char *name, int *rsz, int pad)
@@ -228,7 +271,8 @@ byte *BTM_LoadFileI(char *name, int *rsz, int pad)
 			sz=i;
 		}else
 		{
-			free(buf);
+			if(!(pad&6))
+				btm_free(buf);
 			return(NULL);
 		}
 	}
@@ -841,7 +885,7 @@ int BTM_WorldCheckMinDecBuf(BTM_World *wrl, int decsz)
 	{
 		if(wrl->lz_tdecbuf)
 		{
-			free(wrl->lz_tdecbuf);
+			btm_free(wrl->lz_tdecbuf);
 			wrl->lz_tdecbuf=NULL;
 		}
 	}
@@ -865,7 +909,7 @@ int BTM_WorldCheckMinEncBuf(BTM_World *wrl, int esz)
 	{
 		if(wrl->lz_tencbuf)
 		{
-			free(wrl->lz_tencbuf);
+			btm_free(wrl->lz_tencbuf);
 			wrl->lz_tencbuf=NULL;
 		}
 	}
@@ -889,7 +933,7 @@ int BTM_WorldCheckMinEnc2Buf(BTM_World *wrl, int esz)
 	{
 		if(wrl->lz_tenc2buf)
 		{
-			free(wrl->lz_tenc2buf);
+			btm_free(wrl->lz_tenc2buf);
 			wrl->lz_tenc2buf=NULL;
 		}
 	}

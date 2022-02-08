@@ -624,6 +624,14 @@ thContext *thGetContext()
 	return(inf);
 }
 
+int thGetThreadId()
+{
+	thContext *inf;
+	inf=thGetContext();
+	return(inf->id);
+}
+
+
 int thGetTlsTlsW32()
 {
 	bipro_thread_init();

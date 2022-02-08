@@ -34,6 +34,7 @@ int BTM_ConAddCvar(char *name, void *ptr, int pty)
 	BTM_ConCmd *cmd;
 	
 	cmd=btm_malloc(sizeof(BTM_ConCmd));
+	memset(cmd, 0, sizeof(BTM_ConCmd));
 	cmd->name=bccx_strdup(name);
 	cmd->cvar=ptr;
 	cmd->cvty=pty;
@@ -49,6 +50,7 @@ int BTM_ConAddCommand(char *name, void *ptr)
 	BTM_ConCmd *cmd;
 	
 	cmd=btm_malloc(sizeof(BTM_ConCmd));
+	memset(cmd, 0, sizeof(BTM_ConCmd));
 	cmd->name=bccx_strdup(name);
 	cmd->Run=ptr;
 	
@@ -62,6 +64,7 @@ int BTM_ConAddCmdVar(char *name, void *run, void *ptr, int pty)
 	BTM_ConCmd *cmd;
 	
 	cmd=btm_malloc(sizeof(BTM_ConCmd));
+	memset(cmd, 0, sizeof(BTM_ConCmd));
 	cmd->name=bccx_strdup(name);
 	cmd->Run=run;
 	cmd->cvar=ptr;

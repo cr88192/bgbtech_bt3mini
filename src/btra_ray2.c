@@ -70,8 +70,12 @@ float *btmra_sinang_f;
 float *btmra_cosang_f;
 
 int btm_drawdist;
+int cam_mvflags;
 
 int btmgl_time_ms;
+
+int btm_drawstat_dist[1024];
+int btm_drawstat_dist_hrsc[1024];
 
 u64 btm_raycast_avgvec(u64 vec0, u64 vec1)
 {
@@ -758,6 +762,12 @@ int BTM_RaycastSceneQuad(BTM_World *wrl)
 	n=wrl->scr_npts;
 	wrl->scr_npts=0;
 	
+	for(i=0; i<1024; i++)
+	{
+		btm_drawstat_dist[i]=0;
+		btm_drawstat_dist_hrsc[i]=0;
+	}
+	
 	for(i=0; i<n; i++)
 	{
 		j=wrl->scr_pts_rcnt[i];
@@ -778,6 +788,11 @@ int BTM_RaycastSceneQuad(BTM_World *wrl)
 			if(j<0)
 				continue;
 		}
+		
+		btm_drawstat_dist[l]++;
+
+		blk=BTM_GetWorldBlockCix(wrl, rcix);
+		btm_drawstat_dist_hrsc[l]+=btmgl_vox_hrsc[blk&255];
 		
 		BTM_RaycastTryAddHitCix1(wrl, rcix, j-1);
 	}

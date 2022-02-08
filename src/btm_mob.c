@@ -300,7 +300,7 @@ int BTMGL_LoadTextureForName(char *name)
 		tex=btmgl_tex_rov++;
 		pglBindTexture(TKRA_TEXTURE_2D, tex);
 		BTMGL_UploadCompressed(tbuf, 1, 1);
-		free(tbuf);
+//		btm_free(tbuf);
 	}else
 	{
 		tex=0;
@@ -596,9 +596,25 @@ int BTM_CheckMobCanMoveSpot(BTM_World *wrl, BTM_MobEntity *self, u64 spot)
 	return(1);
 }
 
+int BTM_MobPlaySound(BTM_World *wrl, BTM_MobEntity *self,
+	char *name, int vol)
+{
+	u64 cpos, cvel;
+	int tone;
+
+	tone=256+((rand()&127)-63);
+
+	cpos=BTM_MobGetOriginPos(wrl, self);
+	cvel=BTM_MobGetVelPos(wrl, self);
+
+	BTM_PlaySample3D(name, cpos, cvel, vol, tone);
+	return(0);
+}
+
 int BTM_RunTickMobBasic(BTM_World *wrl, BTM_MobEntity *self)
 {
 	u64 cpos, mvpos;
+	char *snd;
 	int mvfl;
 
 	BTM_RunMobTickMove(wrl, self);
@@ -620,6 +636,36 @@ int BTM_RunTickMobBasic(BTM_World *wrl, BTM_MobEntity *self)
 		self->yaw=rand()&255;
 		self->mob_rtick=128+(rand()&63);
 		self->mob_mvtick=rand()&63;
+		
+		if(!(rand()&15))
+		{
+			snd=NULL;
+			
+			if(!strcmp(self->cname, "pig"))
+				snd="sound/animal/pig0.wav";
+
+			if(!strcmp(self->cname, "sheep"))
+			{
+				if(rand()&1)
+					snd="sound/animal/sheep_idle0.wav";
+				else
+					snd="sound/animal/sheep_idle1.wav";
+			}
+
+			if(!strcmp(self->cname, "cow"))
+				snd="sound/animal/moo0.wav";
+
+			if(!strcmp(self->cname, "chicken"))
+			{
+				if(rand()&1)
+					snd="sound/animal/cluck1.wav";
+				else
+					snd="sound/animal/cluck1.wav";
+			}
+		
+			if(snd)
+				BTM_MobPlaySound(wrl, self, snd, 255);
+		}
 	}
 
 	if((self->vel_x+self->vel_y)!=0)
@@ -1564,6 +1610,35 @@ u64 BTM_CalcRayStepVector(u64 spos, u64 epos)
 		((dz&0x0000FFFFULL)<<48) ;
 	return(step);
 }
+
+#if 0
+int BTM_CalcRayRelativeApproach(u64 svel, u64 evel)
+{
+	u64 step;
+	int sx, sy, sz, ex, ey, ez, dx, dy, dz, d;
+	
+	sx=(svel>> 0)&0x00FFFFFFU;
+	sy=(svel>>24)&0x00FFFFFFU;
+	sz=(svel>>48)&0x0000FFFFU;
+	
+	ex=(evel>> 0)&0x00FFFFFFU;
+	ey=(evel>>24)&0x00FFFFFFU;
+	ez=(evel>>48)&0x0000FFFFU;
+	
+	sx=((s32)(sx<<8))>>8;
+	sy=((s32)(sy<<8))>>8;
+	
+	ex=((s32)(ex<<8))>>8;
+	ey=((s32)(ey<<8))>>8;
+	
+	dx=ex-sx;
+	dy=ey-sy;
+	dz=ez-sz;		
+	
+//	d=BTM_CalcRayXyzDistApprox(dx, dy, dz);
+	return(d);
+}
+#endif
 
 BTM_MobEntity *BTM_QueryWorldEntitiesAtPos(
 	BTM_World *wrl, BTM_MobEntity *slst, u64 spos)

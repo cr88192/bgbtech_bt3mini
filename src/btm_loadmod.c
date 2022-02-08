@@ -87,6 +87,23 @@ int TkMod_LoadFromBufferCtx(TkMod_Info *ctx, byte *data, int dsz)
 
 	ctx->songlen=songlen;
 
+	ctx->magic1=BTM_MAGIC1;
+	ctx->magic2=BTM_MAGIC1;
+	ctx->magic3=BTM_MAGIC1;
+	ctx->magic4=BTM_MAGIC1;
+
+	return(0);
+}
+
+int TkMod_ValidateSongMagic(TkMod_Info *ctx)
+{
+	if(		(ctx->magic1!=BTM_MAGIC1) ||
+			(ctx->magic2!=BTM_MAGIC1) ||
+			(ctx->magic3!=BTM_MAGIC1) ||
+			(ctx->magic4!=BTM_MAGIC1) )
+	{
+		debug_break
+	}
 	return(0);
 }
 
@@ -99,6 +116,7 @@ TkMod_Info *TkMod_GetMod(char *name)
 	cur=tkm_loadmods;
 	while(cur)
 	{
+		TkMod_ValidateSongMagic(cur);
 		if(!strcmp(cur->name, name))
 			return(cur);
 		cur=cur->next;
@@ -115,15 +133,15 @@ TkMod_Info *TkMod_GetMod(char *name)
 	if(buf)
 	{
 		TkMod_LoadFromBufferCtx(cur, buf, sz);
-
-		len=16000;
-		cur->mixbuf=malloc(len*2);
-		cur->mixpos=cur->mixbuf;
-		cur->mixpos=cur->mixbuf;
-		cur->mixpos_cs=cur->mixbuf;
-		cur->mixbufs=cur->mixbuf;
-		cur->mixbufe=cur->mixbuf+len;
+		TkMod_ValidateSongMagic(cur);
 	}
+
+	len=16384;
+	cur->mixbuf=malloc(len*2);
+	cur->mixpos=cur->mixbuf;
+	cur->mixpos_cs=cur->mixbuf;
+	cur->mixbufs=cur->mixbuf;
+	cur->mixbufe=cur->mixbuf+len;
 
 	return(cur);
 }
@@ -132,6 +150,8 @@ int TkMod_UpdateSongCol(TkMod_Info *ctx, int col, int cmda, int cmdb)
 {
 	int cmdc, cmds, cmdx, cmdy, hz, step, ix;
 	int i, j, k;
+
+	TkMod_ValidateSongMagic(ctx);
 
 	cmds=((cmda>>12)<<4)|(cmdb>>12);
 	cmdx=cmda&0x0FFF;
@@ -264,6 +284,8 @@ int TkMod_UpdateSongCol(TkMod_Info *ctx, int col, int cmda, int cmdb)
 		ctx->steprate[col]=step;
 	//	ctx->step_fq[col]=cmdx;
 	}
+
+	TkMod_ValidateSongMagic(ctx);
 	return(0);
 }
 
@@ -273,11 +295,16 @@ int TkMod_StepSongRow(TkMod_Info *ctx)
 	int pat, row, cmda, cmdb;
 	int i, j, k;
 	
+	if(!(ctx->hed2.num_positions))
+		return(0);
+	
+	TkMod_ValidateSongMagic(ctx);
+
 	row=ctx->row;
 	ctx->row=row+1;
 	i=row>>6;
 	
-	if(i>=ctx->hed2.num_positions)
+	while(i>=ctx->hed2.num_positions)
 	{
 		row-=(ctx->hed2.num_positions<<6);
 		ctx->row=row+1;
@@ -298,6 +325,8 @@ int TkMod_StepSongRow(TkMod_Info *ctx)
 		TkMod_UpdateSongCol(ctx, k, cmda, cmdb);
 //		printf("%02X-%01X-%03X-%02X ", cmds, cmdc, cmdx, cmdy);
 	}
+
+	TkMod_ValidateSongMagic(ctx);
 //	printf("\n");
 	return(0);
 }
@@ -320,7 +349,20 @@ int TkMod_StepMixCtx(TkMod_Info *ctx, int cnt)
 	int cmdx, hz, step;
 	int i, j, k;
 
+	if(!(ctx->hed2.num_positions))
+		return(0);
+
 	ct=ctx->mixpos;
+
+	TkMod_ValidateSongMagic(ctx);
+
+//	return(0);
+
+	if(ct<(ctx->mixbufs))
+		{ debug_break }
+	if((ct+cnt)>(ctx->mixbufe))
+		{ debug_break }
+//		return(-1);
 
 	i0=ctx->sampidx[0];		i1=ctx->sampidx[1];
 	i2=ctx->sampidx[2];		i3=ctx->sampidx[3];
@@ -341,6 +383,8 @@ int TkMod_StepMixCtx(TkMod_Info *ctx, int cnt)
 	sld0=sle0-slb0;	sld1=sle1-slb1;
 	sld2=sle2-slb2;	sld3=sle3-slb3;
 	
+#if 1
+
 	for(i=0; i<cnt; i++)
 	{
 		j0=sf0>>12;		j1=sf1>>12;
@@ -393,6 +437,8 @@ int TkMod_StepMixCtx(TkMod_Info *ctx, int cnt)
 		while(sf3>sle3)		sf3-=sld3;
 	}
 
+#endif
+
 	ctx->stepfrac[0]=sf0;	ctx->stepfrac[1]=sf1;
 	ctx->stepfrac[2]=sf2;	ctx->stepfrac[3]=sf3;
 	ctx->mixpos=ct+cnt;
@@ -431,6 +477,14 @@ int TkMod_StepMixCtx(TkMod_Info *ctx, int cnt)
 			ctx->step_fq[i]=cmdx;
 		}
 	}
+
+	if(ct<(ctx->mixbufs))
+		{ debug_break }
+	if(ctx->mixpos>(ctx->mixbufe))
+		{ debug_break }
+
+	TkMod_ValidateSongMagic(ctx);
+
 	return(0);
 }
 

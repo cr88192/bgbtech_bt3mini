@@ -355,6 +355,24 @@ int I_KeyDownL(int key)
 //	return(0);
 }
 
+int GfxDrv_MouseGetPos(int *rmx, int *rmy, int *rmb)
+{
+	*rmx=0;
+	*rmy=0;
+	*rmb=0;
+	return(0);
+}
+
+int GfxDrv_MouseSetPos(int mx, int my)
+{
+	return(0);
+}
+
+int SoundDev_WriteStereoSamples2(s16 *samp, int cnt, int ovcnt)
+{
+	return(0);
+}
+
 #endif
 
 
@@ -413,11 +431,13 @@ float cam_ang_pitch;
 float cam_org[3];
 float cam_vel[3];
 float cam_ivel[3];
-int cam_mvflags;
+// int cam_mvflags;
 
 int skybox_tex;
 int skybox_tex_stars;
 int skybox_onetex;
+
+byte btm_dopause;
 
 int BTMGL_InitSkybox()
 {
@@ -767,6 +787,9 @@ int BTM_RayTick(void *ptr, int dt)
 	BTM_World *wrl;
 	int t0, t1, tt;
 
+	if(btm_dopause)
+		return(0);
+
 	wrl=ptr;
 
 	wrldt+=dt;
@@ -1092,8 +1115,8 @@ int main(int argc, char *argv[])
 		btm_mlook=1;
 
 //	BTM_PlaySong("music/PiTink1.mod");
-	BTM_PlaySong("music/Life2.mod");
-//	BTM_PlaySong("music/musix-shine.mod");
+//	BTM_PlaySong("music/Life2.mod");
+	BTM_PlaySong("music/musix-shine.mod");
 
 #ifdef BTM_RAYTHREAD
 	thThread(btm_raythreadproc, wrl);
@@ -1171,9 +1194,11 @@ int main(int argc, char *argv[])
 		if(btm_mlook)
 			wrl->cam_flags|=2;
 
+		btm_dopause=1;
 		if(!BTM_MenuDownP() && !BTM_ConDownP() && !BTM_InvenOpenP())
 		{
 			wrl->daytimer+=dt;
+			btm_dopause=0;
 		
 //			if(mb&2)
 			if(btm_mlook)
@@ -1601,9 +1626,14 @@ int main(int argc, char *argv[])
 			((u64)((u32)(cam_org[0]*256)&0xFFFFFFU)<< 0) |
 			((u64)((u32)(cam_org[1]*256)&0xFFFFFFU)<<24) |
 			((u64)((u32)(cam_org[2]*256)&0x00FFFFU)<<48) ;
+
+		wrl->cam_vel=
+			((u64)((u32)(cam_vel[0]*256)&0xFFFFFFU)<< 0) |
+			((u64)((u32)(cam_vel[1]*256)&0xFFFFFFU)<<24) |
+			((u64)((u32)(cam_vel[2]*256)&0x00FFFFU)<<48) ;
 		
 		BTM_SoundSetVpos(
-			wrl->cam_org,
+			wrl->cam_org, wrl->cam_vel,
 			wrl->cam_yaw, wrl->cam_pitch);
 		
 #ifndef BTM_RAYTHREAD

@@ -604,6 +604,26 @@ int BTM_UpdateBlockGrassForRCix(BTM_World *wrl, u64 rcix)
 	return(0);
 }
 
+int BTM_UpdateBlockPlantForRCix(BTM_World *wrl, u64 rcix)
+{
+	u32 blka[6];
+	u32 blk, blk1, blk2, blk3;
+	u64 rcix1, rcix2;
+	int i, j, k;
+	
+	blk=BTM_GetWorldBlockCix(wrl, rcix);
+	j=blk&255;
+	k=(blk>>8)&15;
+	
+	if((k || (j!=BTM_BLKTY_GRASSCLUMP)) && (k<15))
+	{
+		blk1=blk+0x100;
+		BTM_SetWorldBlockCixNl(wrl, rcix, blk1);
+	}
+
+	return(0);
+}
+
 int BTM_BlockTickBlockForRCix(BTM_World *wrl, u64 rcix)
 {
 	u32 blk, blk1, blk2;
@@ -626,6 +646,15 @@ int BTM_BlockTickBlockForRCix(BTM_World *wrl, u64 rcix)
 		(j==BTM_BLKTY_REDGRASS))
 	{
 		BTM_UpdateBlockGrassForRCix(wrl, rcix);
+	}
+
+	if(	(j==BTM_BLKTY_GRASSCLUMP) ||
+		(j==BTM_BLKTY_WHEAT) ||
+		(j==BTM_BLKTY_CARROTS) ||
+		(j==BTM_BLKTY_BEETS) ||
+		(j==BTM_BLKTY_POTATOES))
+	{
+		BTM_UpdateBlockPlantForRCix(wrl, rcix);
 	}
 	
 //	if((j>=4) && !((blk>>24)&63))
@@ -657,7 +686,14 @@ int BTM_BlockTickRegion(BTM_World *wrl, BTM_Region *rgn)
 	cnt=255;
 	while(cnt)
 	{
-		cix=(rand()*rand()*rand())&((1<<21)-1);
+//		cix=(rand()*rand()*rand())&((1<<21)-1);
+
+		cix=rand();
+		cix=(cix*127)+rand();
+		cix=(cix*127)+rand();
+		cix=(cix*127)+rand();
+		cix=cix&((1<<21)-1);
+
 		rcix=(((u64)(rgn->rgnix))<<21)|cix;
 		BTM_BlockTickBlockForRCix(wrl, rcix);
 		

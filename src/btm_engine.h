@@ -179,15 +179,24 @@ typedef int64_t	s64;
 #define BTM_BLKTY_BIGBRICK_BRN		0x50
 #define BTM_BLKTY_BIGBRICK_GRY		0x51
 
+#define BTM_BLKTY_WHEAT				0x52
+#define BTM_BLKTY_CARROTS			0x53
+#define BTM_BLKTY_BEETS				0x54
+#define BTM_BLKTY_POTATOES			0x55
+#define BTM_BLKTY_PUMPKIN_VINE		0x55
+#define BTM_BLKTY_MELLON_VINE		0x56
+
 #define BTM_BLKDFL_NODRAW		0x01000000U		//Not Drawn
 #define BTM_BLKDFL_SEETHRU		0x02000000U		//Does not block visibility.
 #define BTM_BLKDFL_NONSOLID		0x04000000U		//Block is Non-Solid.
 #define BTM_BLKDFL_FLUID		0x08000000U		//Block is Fluid
 
-#define BTM_BLKDFL_TY_MASK		0x70000000U		//Block is a Slab
+#define BTM_BLKDFL_TY_MASK		0xF0000000U		//Block is a Slab
 #define BTM_BLKDFL_TY_FULL		0x00000000U		//Full Block
 #define BTM_BLKDFL_TY_SLAB		0x10000000U		//Block is a Slab
 #define BTM_BLKDFL_TY_STAIR		0x20000000U		//Block is Stairs
+#define BTM_BLKDFL_TY_PLANT		0x30000000U		//Block is Plant
+#define BTM_BLKDFL_TY_CROP		0x40000000U		//Block is Plant (that grows)
 
 
 #define BTM_CVTY_INT			0x0000
@@ -275,6 +284,7 @@ u32	magic3;
 byte	cam_yaw;
 sbyte	cam_pitch;
 u64		cam_org;
+u64		cam_vel;
 u64		cam_flags;
 
 float	cam_fw[3];

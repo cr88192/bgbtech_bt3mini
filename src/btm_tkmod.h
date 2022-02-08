@@ -23,8 +23,12 @@ byte sig[4];			//82, "M.K."
 };
 
 struct TkMod_Info_s {
+u32				magic1;
+
 TkMod_Info		*next;
 char			*name;
+
+u32				magic2;
 
 TkMod_SampHead	samphead[64];
 TkMod_Head2		hed2;
@@ -34,6 +38,8 @@ byte			*sampbuf;
 byte			*patterns;
 int				sampofs[64];
 byte			*sampdat[64];
+
+u32				magic3;
 
 s16				*mixbuf;
 s16				*mixbufs;
@@ -62,6 +68,8 @@ int				step_fq_stgt[4];
 int				samp_lbeg[4];
 int				samp_lend[4];
 byte			samp_isloop[4];
+
+u32				magic4;
 
 };
 
