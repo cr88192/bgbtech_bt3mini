@@ -1116,7 +1116,11 @@ int main(int argc, char *argv[])
 
 //	BTM_PlaySong("music/PiTink1.mod");
 //	BTM_PlaySong("music/Life2.mod");
-	BTM_PlaySong("music/musix-shine.mod");
+	BTM_PlaySong("music/Life3.s3m");
+//	BTM_PlaySong("music/musix-shine.mod");
+//	BTM_PlaySong("music/kc-techrockloop.s3m");
+//	BTM_PlaySong("music/kj_jose_-_a_new_frontend.s3m");
+//	BTM_PlaySong("music/Noise0.s3m");
 
 #ifdef BTM_RAYTHREAD
 	thThread(btm_raythreadproc, wrl);

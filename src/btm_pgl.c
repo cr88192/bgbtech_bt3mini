@@ -7,9 +7,6 @@
 
 #endif
 
-#ifdef __BJX2__
-
-#endif
 
 
 void (APIENTRY *pglAlphaFunc)(GLenum func, GLclampf ref);

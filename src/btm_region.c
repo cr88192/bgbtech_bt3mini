@@ -1664,6 +1664,8 @@ int BTM_FlattenRegion(BTM_World *wrl, BTM_Region *rgn)
 	
 	if(rgn->dirty&1)
 	{
+		rgn->rgnvseq++;
+	
 		for(i=0; i<512; i++)
 		{
 			k=BTM_RegionDoStoreChunkCix(wrl, rgn, i);
@@ -1672,6 +1674,8 @@ int BTM_FlattenRegion(BTM_World *wrl, BTM_Region *rgn)
 				printf("BTM_FlattenRegion: Damaged Chunks, Abort\n");
 				return(-1);
 			}
+			
+			rgn->chk_vseq[i]=rgn->rgnvseq;
 		}
 
 		if(!tentbuf)

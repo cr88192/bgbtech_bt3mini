@@ -67,6 +67,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "btm_light.c"
 #include "btm_mob.c"
 #include "btm_inven.c"
+#include "btm_delta.c"
 
 #include "btm_wad4.c"
 

@@ -373,12 +373,14 @@ byte		vox_n[512];		//number of assigned indices
 byte		vox_m[512];		//max allocated indices (log2)
 u32			chk_fl[512];	//per chunk flags
 u32			chk_ofsz[768];	//per chunk offset/size
+u32			chk_vseq[512];	//chunk version sequence
 u32			magic2;
 u16			voxbmix[512];	//voxel bitmap, index
 u32			magic3;
 u64			*voxbm;			//voxel bitmap, bits
 
 int			rgnix;
+u32			rgnvseq;		//region version sequence
 
 byte		*etb_dat[64];
 int			etb_sz[64];
