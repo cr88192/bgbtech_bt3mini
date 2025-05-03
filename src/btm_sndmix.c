@@ -304,6 +304,7 @@ int BTM_PlaySample3D(char *name, u64 spos, u64 svel, int vol,
 	int da, attn, i;
 
 	da=BTM_CalcRayDistApprox(spos, tkm_snd_vpos);
+	da*=4;
 
 	if(da<256)
 		da=256;
@@ -409,6 +410,9 @@ int BTM_MixUpdateChannelPos(int chan)
 
 	da=BTM_CalcRayDistApprox(spos, tkm_snd_vpos);
 	da2=BTM_CalcRayDistApprox(spos2, vpos2);
+	da*=4;
+	da2*=4;
+
 	dv=da2-da;
 
 	if(da<256)

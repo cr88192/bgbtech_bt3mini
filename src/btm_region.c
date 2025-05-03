@@ -951,10 +951,18 @@ int BTM_WorldCheckMinEnc2Buf(BTM_World *wrl, int esz)
 
 u32 BTM_RegionCheckRepackLight(u32 blk)
 {
-	if((((blk>>12)&15)==0) && (((blk>>16)&15)!=0))
-	{
-		blk=blk&0xFF03FFFF|((blk<<2)&0x00F00000U);
-	}
+//	if(((blk&0xFF)>=1) && ((blk&0xFF)<=3))
+//	{
+//		if(((blk>>12)&0xFF)==0x0F)
+//		{
+//			blk&=~(0xFF<<12);
+//		}
+//	}
+
+//	if((((blk>>12)&15)==0) && (((blk>>16)&15)!=0))
+//	{
+//		blk=blk&0xFF03FFFF|((blk<<2)&0x00F00000U);
+//	}
 	return(blk);
 }
 

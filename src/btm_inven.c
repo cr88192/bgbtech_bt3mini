@@ -24,6 +24,8 @@ Inventory System
  */
 
 byte	btm_inven_open;
+byte btm_condown;
+byte btm_conchat;
 
 int			btm_texfont_tinycnt;
 int			btm_texfont_inven;
@@ -66,12 +68,12 @@ int BTM_DrawInventoryGrid(BTM_World *wrl)
 		for(x=0; x<8; x++)
 	{
 		BTM_DrawCharPrim(
-			-128+(x*32), -96+(y*32),
+			-128+(x*32), -80+(y*32),
 			32, 32, 0xFE,
 			btm_texfont_inven, 0xFFFFFFFFU);
 
 		BTM_DrawInventoryCell(wrl,
-			-128+(x*32), -96+(y*32),
+			-128+(x*32), -80+(y*32),
 			wrl->cam_inven[y*8+x]);
 	}
 	return(0);
@@ -88,13 +90,20 @@ int BTM_DrawInventory(BTM_World *wrl)
 
 int BTM_InventoryHandleKey(BTM_World *wrl, u16 key)
 {
-	if(BTM_ConDownP() || BTM_MenuDownP())
+//	if(BTM_ConDownP() || BTM_MenuDownP())
+	if(btm_condown || BTM_MenuDownP())
 		return(0);
 	
 	if(key=='\t')
 	{
 		btm_inven_open=!btm_inven_open;
+		btm_conchat=0;
 		return(0);
+	}
+	
+	if(btm_inven_open)
+	{
+		btm_conchat=1;
 	}
 
 	if(!btm_inven_open)

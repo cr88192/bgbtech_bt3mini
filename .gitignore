@@ -1,7 +1,7 @@
 *.sou
 *.tga
 *.pdb
-*.pdn
+// *.pdn
 *.obj
 *.pdb
 *.db

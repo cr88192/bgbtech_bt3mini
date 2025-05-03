@@ -225,6 +225,42 @@ typedef int64_t	s64;
 #define BTM_TARGET_DRAWDIST	128
 #endif
 
+#define BRM_VART16_SMALLLIT		0x1000ULL
+#define BRM_VART16_SMALLSTRA	0x1001ULL
+#define BRM_VART16_SMALLSTRB	0x1002ULL
+
+#define BRM_PGMVAR_PTR			(0x0ULL<<60)
+#define BRM_PGMVAR_FIXNUM		(0x4ULL<<60)
+#define BRM_PGMVAR_FLONUM		(0x8ULL<<60)
+
+#define BRM_PGMVAR_SMALLLIT		(0x1000ULL<<48)
+#define BRM_PGMVAR_SMALLSTRA	(0x1001ULL<<48)
+#define BRM_PGMVAR_SMALLSTRB	(0x1002ULL<<48)
+
+
+#define	BRM_PGMVAR_NULL			(BRM_PGMVAR_SMALLLIT+0)
+#define	BRM_PGMVAR_UNDEFINED	(BRM_PGMVAR_SMALLLIT+1)
+
+#define BRM_PGMOPR_ADD			0
+#define BRM_PGMOPR_SUB			1
+#define BRM_PGMOPR_MUL			2
+#define BRM_PGMOPR_DIV			3
+#define BRM_PGMOPR_MOD			4
+#define BRM_PGMOPR_AND			5
+#define BRM_PGMOPR_OR			6
+#define BRM_PGMOPR_XOR			7
+#define BRM_PGMOPR_SHL			8
+#define BRM_PGMOPR_SHR			9
+
+#define BRM_PGMOPR_EQ			10
+#define BRM_PGMOPR_NE			11
+#define BRM_PGMOPR_GT			12
+#define BRM_PGMOPR_LE			13
+#define BRM_PGMOPR_LT			14
+#define BRM_PGMOPR_GE			15
+
+#define BRM_PGMOPR_NOT			16
+#define BRM_PGMOPR_BITNOT		17
 
 
 typedef u16		btmra_rastpixel;
@@ -277,6 +313,8 @@ u32	magic2;
 
 BTM_MobEntity	*free_mobent;
 
+BTM_MobEntity	*nearby_mobent;
+
 void	*mm_p2alloc[20];
 
 u32	magic3;
@@ -316,6 +354,7 @@ byte	sel_bt;
 int		daytimer;
 short	day;
 byte	daylight;
+byte	dodaytimer;
 
 BTM_TexImg	*texlist[256];
 
@@ -340,6 +379,18 @@ u64		tgen_vargbl_val[512];
 int		tgen_vargbl_cnt;
 
 u32		cam_inven[6*8];
+
+
+u16			*pgm_gbl_vars;
+u64			*pgm_gbl_vals;
+s16			pgm_n_gbls;
+s16			pgm_m_gbls;
+
+u16			pgm_dyn_vars[256];
+u64			pgm_dyn_vals[256];
+byte		pgm_dyn_pos;
+
+char		*pgm_print_stdout_ct;
 
 };
 
@@ -407,6 +458,7 @@ BTM_MobEntity	*next;
 BTM_MobEntity	*chain;
 BTM_MobEntity	*nxt_bpos;
 BTM_MobEntity	*chn_bpos;
+BTM_MobEntity	*chain_near;
 int				org_x;		//16.8
 int				org_y;		//16.8
 int				org_z;		//8.8
@@ -414,6 +466,10 @@ byte			yaw;		//yaw angle
 byte			pitch;		//pitch angle (if relevant)
 // int				spr_id;		//sprite
 char			*cname;		//entity class name
+char			*npcname;	//NPC character name
+char			*dfl_looktext;		//object generic look text
+char			*looktext;			//object look text
+char			*modelname;			//modelname (props)
 
 int				orgl_x;		//16.8
 int				orgl_y;		//16.8
@@ -483,6 +539,8 @@ int				spr_frame;
 };
 
 typedef struct BTM_ConCmd_s BTM_ConCmd;
+typedef struct BTM_ConPgm_s BTM_ConPgm;
+typedef struct BTM_PgmExt_s BTM_PgmExt;
 
 struct BTM_ConCmd_s {
 BTM_ConCmd	*next;
@@ -492,6 +550,97 @@ void		*cvar;
 byte		cvty;	//type (storage)
 byte		uity;	//UI subtype.
 byte		flag;
+};
+
+struct BTM_ConPgm_s {
+BTM_ConPgm	*next;
+char		*name;
+// u16			*gbl_vars;
+// u64			*gbl_vals;
+// s16			n_gbls;
+
+u16			*ltokb;			//line token buffer
+u16			*ltoki;			//line token index
+u16			*lbl_id;		//label IDs
+u16			*lbl_ix;		//label line index
+int			n_lines;
+int			n_tokens;
+s16			n_lbls;
+
+int			cur_line;
+int			nxt_line;
+u64			retval;
+
+int			gosub_retidx[16];
+int			gosub_retdst[16];
+byte		gosub_dynidx[16];
+byte		gosub_retpos;
+
+int			loop_retidx[16];
+u64			loop_endval[16];
+u64			loop_stpval[16];
+byte		loop_retpos;
+};
+
+struct BTM_PgmExt_s {
+BTM_PgmExt *next;
+u64 (*Run)(BTM_World *wrl, BTM_ConPgm *pgm, u16 **rtcs);
+u64 (*Infix)(BTM_World *wrl, BTM_ConPgm *pgm, u16 tok, u64 vala, u64 valb);
+u16 token;	//keyword token
+u16 level;	//level this applies to
+};
+
+
+typedef struct BTM_BtModel_s BTM_BtModel;
+typedef struct BTM_BtModelMesh_s BTM_BtModelMesh;
+typedef struct BTM_BtModelBone_s BTM_BtModelBone;
+typedef struct BTM_BtModelAnim_s BTM_BtModelAnim;
+
+struct BTM_BtModel_s {
+BTM_BtModel *next;
+char *name;
+BTM_BtModelMesh *mesh[256];
+BTM_BtModelBone *bone[256];
+BTM_BtModelAnim *anim[256];
+float lod_dist[64];
+byte lod_base[64];
+byte lod_cnt[64];
+int n_mesh;
+int n_lod;
+int n_bone;
+int n_anim;
+};
+
+struct BTM_BtModelMesh_s {
+float *v_xy;
+float *v_st;
+float *v_nv;
+byte *v_bn;
+u32 *v_cl;
+u16 *tris;
+char *matname;
+u32 baseclr;
+int n_vtx;
+int n_tri;
+};
+
+struct BTM_BtModelBone_s {
+float baserot[4];
+float baseorg[4];
+char *name;
+byte id_parent;
+byte id_solid;
+};
+
+struct BTM_BtModelAnim_s {
+BTM_BtModelAnim *next;
+char *name;
+u32 *frm_rot;
+u32 *frm_org;
+u32 *frm_scl;
+byte n_frames;
+byte n_bones;
+byte framerate;
 };
 
 #define		btm_malloc(sz)	btm_malloc_lln(sz, __FILE__, __LINE__)
@@ -537,5 +686,14 @@ typedef struct {
 
 char *BTM_CvarGetStr(char *name);
 int BTM_CvarSetStr(char *name, char *val);
+
+char *BTM_PgmGetGlobalNameStr(BTM_World *wrl, char *name);
+u32 BTM_GetWorldBlockCix(BTM_World *wrl, u64 rcix);
+
+void *btm_malloc_lln(int sz, char *lfn, int lln);
+void *btm_realloc_lln(void *ptr, int sz, char *lfn, int lln);
+void btm_free(void *ptr);
+
+BTM_BtModel *BTM_BmdLoadModelBuffer(byte *buf, int sz);
 
 #endif

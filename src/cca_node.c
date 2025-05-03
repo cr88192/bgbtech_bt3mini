@@ -161,13 +161,72 @@ void *bccx_rmemdup(void *ptr, int sz)
 	return(b);
 }
 
-char **bccx_split(char *s)
+byte bccx_oprchar(int v)
+{
+	int rt;
+	switch(v)
+	{
+		case '!':	rt=1;	break;
+		case '@':	rt=1;	break;
+		case '#':	rt=1;	break;
+		case '%':	rt=1;	break;
+		case '^':	rt=1;	break;
+		case '&':	rt=1;	break;
+		case '*':	rt=1;	break;
+		case '-':	rt=1;	break;
+		case '+':	rt=1;	break;
+		case '=':	rt=1;	break;
+		case '/':	rt=1;	break;
+		case '.':	rt=1;	break;
+		case ',':	rt=1;	break;
+		case '~':	rt=1;	break;
+		case ':':	rt=1;	break;
+		case ';':	rt=1;	break;
+		case '<':	rt=1;	break;
+		case '>':	rt=1;	break;
+		default:	rt=0;	break;
+	}
+	return(rt);
+}
+
+byte bccx_sepchar(int v)
+{
+	int rt;
+	switch(v)
+	{
+		case ',':	rt=1;	break;
+		case ';':	rt=1;	break;
+		case '.':	rt=1;	break;
+		case ':':	rt=1;	break;
+		default:	rt=0;	break;
+	}
+	return(rt);
+}
+
+byte bccx_bracechar(int v)
+{
+	int rt;
+	switch(v)
+	{
+		case '(':	rt=1;	break;
+		case ')':	rt=1;	break;
+		case '[':	rt=1;	break;
+		case ']':	rt=1;	break;
+		case '{':	rt=1;	break;
+		case '}':	rt=1;	break;
+		default:	rt=0;	break;
+	}
+	return(rt);
+}
+
+char **bccx_split_i(char *str, int flag)
 {
 	char *ta[64];
-	char tb[256];
-	char **a, *t;
-	int i;
+	char tb[256], tb1[16];
+	char **a, *s, *t;
+	int i, j, k, rdx;
 
+	s=str;
 //	a=bccx_ralloc(64*sizeof(char *));
 //	memset(a, 0, 64*sizeof(char *));
 	memset(ta, 0, 64*sizeof(char *));
@@ -177,8 +236,11 @@ char **bccx_split(char *s)
 	{
 		while(*s && (*s<=' '))s++;
 		if(!*s)break;
-		if(*s=='#')break;
-		if(*s==';')break;
+		if(!(flag&1))
+		{
+			if(*s=='#')break;
+			if(*s==';')break;
+		}
 		if((s[0]=='/') && (s[1]=='/'))
 			break;
 
@@ -188,13 +250,198 @@ char **bccx_split(char *s)
 
 		if(*s=='"')
 		{
+			if(flag&1)
+				*t++='S';
 			s++;
-			while(*s && (*s!='"'))*t++=*s++;
-			if(*s=='"')s++;
+			while(*s)
+			{
+				k=*s;
+				if(k=='"')
+				{
+					s++;
+					break;
+				}
+				if(k=='\\')
+				{
+					s++;
+					k=*s++; j=k&255;
+					switch(k)
+					{
+						case 'r':	j='\r';	break;
+						case 'n':	j='\n';	break;
+						case 't':	j='\t';	break;
+						case 'b':	j='\b';	break;
+						case '\\':	j='\\';	break;
+						case 'x':
+							tb1[0]=s[0];	tb1[1]=s[1];
+							tb1[2]=0;		s+=2;
+							j=strtol(tb1, NULL, 16);
+							break;
+						case 'u':
+							tb1[0]=s[0];	tb1[1]=s[1];
+							tb1[2]=s[2];	tb1[3]=s[3];
+							tb1[4]=0;		s+=4;
+							j=strtol(tb1, NULL, 16);
+							break;
+					}
+					if(j>=0x80)
+					{
+						if(j>=0x400)
+						{
+							*t++=0xE0|((j>>6)&0x0F);
+							*t++=0x80|((j>>6)&0x3F);
+							*t++=0x80|((j>>0)&0x3F);
+						}else
+						{
+							*t++=0xC0|((j>>6)&0x1F);
+							*t++=0x80|((j>>0)&0x3F);
+						}
+					}else
+					{
+						*t++=j;
+					}
+					continue;
+				}
+				
+				*t++=*s++;
+			}
+//			if(*s=='"')s++;
 
 			*t++=0;
 			ta[i++]=bccx_rstrdup(tb);
 			continue;
+		}
+
+		if(flag&1)
+		{
+			if(bccx_sepchar(*s))
+			{
+				*t++='O';
+				*t++=*s++;
+				*t++=0;
+				ta[i++]=bccx_rstrdup(tb);
+				continue;
+			}
+			if(bccx_oprchar(*s))
+			{
+				*t++='O';
+				*t++=*s++;
+				if(bccx_oprchar(*s))
+				{
+					*t++=*s++;
+					if(bccx_oprchar(*s))
+					{
+						*t++=*s++;
+					}
+				}
+				*t++=0;
+				ta[i++]=bccx_rstrdup(tb);
+				continue;
+			}
+			if(bccx_bracechar(*s))
+			{
+				*t++='B';
+				*t++=*s++;
+				*t++=0;
+				ta[i++]=bccx_rstrdup(tb);
+				continue;
+			}
+			
+			k=*s;
+			if(	((k>='a') && (k<='z')) ||
+				((k>='A') && (k<='Z')) ||
+				((k=='_') || (k=='$')))
+			{
+				*t++='I';
+				*t++=*s++;
+
+				k=*s;
+				while(	((k>='a') && (k<='z')) ||
+						((k>='A') && (k<='Z')) ||
+						((k>='0') && (k<='9')) ||
+						((k=='_') || (k=='$')))
+				{
+					*t++=*s++;
+					k=*s;
+				}
+
+				*t++=0;
+				ta[i++]=bccx_rstrdup(tb);
+				continue;
+			}
+			
+			if((k>='0') && (k<='9'))
+			{
+//				if(s[0]=='0')
+				if((s[0]=='0') && (s[1]!='.'))
+				{
+					*t++='N';
+					if((s[1]=='x') || (s[1]=='X'))
+					{
+						*t++=*s++;
+						*t++=*s++;
+						rdx=16;
+					}else
+						if((s[1]=='b') || (s[1]=='B'))
+					{
+						*t++=*s++;
+						*t++=*s++;
+						rdx=2;
+					}else
+					{
+						*t++=*s++;
+						rdx=8;
+					}
+
+					k=*s;
+					while(	((k>='a') && (k<='z')) ||
+							((k>='A') && (k<='Z')) ||
+							((k>='0') && (k<='9')))
+					{
+						j=-1;
+						if((k>='0') && (k<='9'))
+							j=k-'0';
+						if((k>='A') && (k<='Z'))
+							j=10+(k-'A');
+						if((k>='a') && (k<='z'))
+							j=10+(k-'a');
+						if(j>=rdx)
+							break;
+						
+						*t++=*s++;
+						k=*s;
+					}
+
+					*t++=0;
+					ta[i++]=bccx_rstrdup(tb);
+					continue;
+				}
+
+				*t++='N';
+				k=*s;
+				while((k>='0') && (k<='9'))
+				{
+					*t++=*s++;
+					k=*s;
+				}
+				
+//				if(*s=='.')
+				if(k=='.')
+				{
+					tb[0]='R';
+					*t++=*s++;
+					k=*s;
+					while((k>='0') && (k<='9'))
+					{
+						*t++=*s++;
+						k=*s;
+					}
+				}
+				
+				*t++=0;
+				ta[i++]=bccx_rstrdup(tb);
+				continue;
+			}
 		}
 
 		while(*s && (*s>' '))*t++=*s++;
@@ -212,6 +459,16 @@ char **bccx_split(char *s)
 	return(bccx_rmemdup(ta, (i+1)*sizeof(char *)));
 }
 
+char **bccx_split(char *s)
+{
+	return(bccx_split_i(s, 0));
+}
+
+char **bccx_splitb(char *s)
+{
+	return(bccx_split_i(s, 1));
+}
+
 s64 bccx_atoll(char *str)
 {
 	if(str[0]=='0')
@@ -227,7 +484,7 @@ s64 bccx_atoll(char *str)
 
 double bccx_atof(char *str)
 {
-	if(str[0]=='0')
+	if((str[0]=='0') && (str[1]!='.'))
 	{
 		if(str[1]=='x')
 			return(bccx_atoll(str));
@@ -446,8 +703,8 @@ int BCCX_LookupAttrArrIx(BCCX_Node *node, int iv,
 	}
 
 	j=iv&7;
-	*rrn=node->attr_n+j;
-	*rrv=(BCCX_AttrVal *)(node->attr_v+j);
+	*rrn=nl->attr_n+j;
+	*rrv=(BCCX_AttrVal *)(nl->attr_v+j);
 	return(1);
 }
 
@@ -508,13 +765,13 @@ int BCCX_FetchAttrArrIx(BCCX_Node *node, int iv,
 			nl1->ztag=node->ztag;
 			nl->attr_v[j]=(u64)nl1;
 		}
+		i=nl1->malvl;
 		nl=nl1;
-		i=nl->malvl;
 	}
 
 	j=iv&7;
-	*rrn=node->attr_n+j;
-	*rrv=(BCCX_AttrVal *)(node->attr_v+j);
+	*rrn=nl->attr_n+j;
+	*rrv=(BCCX_AttrVal *)(nl->attr_v+j);
 	return(1);
 }
 
@@ -568,7 +825,8 @@ int BCCX_LookupAttrValIx(BCCX_Node *node, int iv,
 		attr_v=NULL;
 		na=node->nattr;
 //		ma=node->mattr;
-		ma=1<<(3*node->malvl);
+//		ma=1<<(3*node->malvl);
+		ma=1<<(3*(node->malvl+1));
 	}
 
 	if(na>ma)
@@ -714,7 +972,8 @@ int BCCX_FetchAttrValIx(BCCX_Node *node, int iv,
 		attr_n=NULL;
 		attr_v=NULL;
 		na=node->nattr;
-		ma=1<<(3*node->malvl);
+//		ma=1<<(3*node->malvl);
+		ma=1<<(3*(node->malvl+1));
 	}
 
 	if(na>ma)

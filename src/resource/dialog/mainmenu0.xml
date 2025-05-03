@@ -29,32 +29,58 @@
 		<option text="Option 2"/>
 	</convo>
 
-	<convo name="use_pig">
+	<convo name="use_pig" face="pigface">
 		<text>
 			Oink!
 		</text>
 		<option text="Leave" goname=""/>
 	</convo>
 
-	<convo name="use_cow">
+	<convo name="use_pig.squeal" face="pigface">
+		<text>
+			Speaking gently to its ear.
+			Despite burns of desire,
+			your request falls flat.
+			Not today...
+		</text>
+		<option text="Leave" goname=""/>
+	</convo>
+
+	<convo name="use_cow" face="cowface">
 		<text>
 			Moo!
 		</text>
 		<option text="Leave" goname=""/>
 	</convo>
 
-	<convo name="use_chicken">
+	<convo name="use_chicken" face="chickenface">
 		<text>
 			Cluck!
 		</text>
 		<option text="Leave" goname=""/>
 	</convo>
 
-	<convo name="use_sheep">
+	<convo name="use_sheep" face="sheepface">
 		<text>
 			Baaaa!
 		</text>
 		<option text="Leave" goname=""/>
 	</convo>
+
+	<convo name="not_here">
+		<text>
+			They aren't here.
+		</text>
+		<option text="Leave" goname=""/>
+	</convo>
+
+	<convo name="do_look" text="$look">
+		<option text="Leave" goname=""/>
+	</convo>
+
+	<face name="pigface" image="pig1"/>
+	<face name="cowface" image="cow1"/>
+	<face name="sheepface" image="sheep1"/>
+	<face name="chickenface" image="chicken1"/>
 
 </dialog>

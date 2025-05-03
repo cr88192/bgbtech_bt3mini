@@ -16,6 +16,86 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 
 u64 BTM_MobGetOriginPos(BTM_World *wrl, BTM_MobEntity *self);
+u32 BTM_GetColorRgbForBlockLight(int ll);
+
+// static byte btm_rgb444tobl[4096];
+static byte btm_rgb555tobl[32768];
+static u32 btm_rgbblpal[256];
+
+int BTM_GetDistRgb(u32 rgb1, u32 rgb2)
+{
+	int cr1, cg1, cb1;
+	int cr2, cg2, cb2;
+	int dr, dg, db, d;
+	cb1=(rgb1>>16)&255;		cg1=(rgb1>> 8)&255;		cr1=(rgb1>> 0)&255;
+	cb2=(rgb2>>16)&255;		cg2=(rgb2>> 8)&255;		cr2=(rgb2>> 0)&255;
+	dr=cr1-cr2;				dg=cg1-cg2;				db=cb1-cb2;
+	dr=dr^(dr>>31);		dg=dg^(dg>>31);		db=db^(db>>31);
+	d=2*dg+dr+db;
+	return(d);
+}
+
+int BTM_InitGetBlockLightForRgb()
+{
+	u32 refrgb;
+	int cr, cg, cb;
+	int bi, bd, d;
+	int i, j, k;
+
+	if(!btm_rgbblpal[15])
+	{
+		for(i=0; i<256; i++)
+		{
+			btm_rgbblpal[i]=BTM_GetColorRgbForBlockLight(i);
+		}
+
+//		for(i=0; i<4096; i++)
+		for(i=0; i<32768; i++)
+		{
+//			cr=(i>>8)&15;	cg=(i>>4)&15;	cb=(i>>0)&15;
+//			cr=(cr<<4)|cr;	cg=(cg<<4)|cg;	cb=(cb<<4)|cb;
+//			cr=(cr<<4);	cg=(cg<<4);	cb=(cb<<4);
+			
+			cr=(i>>10)&31;	cg=(i>>5)&31;	cb=(i>>0)&31;
+			cr=(cr<<3)|(cr>>2);
+			cg=(cg<<3)|(cg>>2);
+			cb=(cb<<3)|(cb>>2);
+
+			bi=0; bd=999999999;
+			refrgb=0xFF000000|(cb<<16)|(cg<<8)|cr;
+			for(j=0; j<256; j++)
+			{
+				d=BTM_GetDistRgb(refrgb, btm_rgbblpal[j]);
+				if(d<bd)
+					{ bi=j; bd=d; }
+			}
+			
+//			btm_rgb444tobl[i]=bi;
+			btm_rgb555tobl[i]=bi;
+		}
+	}
+	return(0);
+}
+
+int BTM_GetBlockLightForRgb(u32 rgb)
+{
+	u32 refrgb;
+	int cr, cg, cb;
+	int bi, bd, d;
+	int i, j, k;
+
+	BTM_InitGetBlockLightForRgb();
+//	cb=(rgb>>20)&15;	cg=(rgb>>12)&15;	cr=(rgb>>4)&15;
+//	i=(cr<<8)|(cg<<4)|cb;
+//	j=btm_rgb444tobl[i];
+
+	cb=(rgb>>19)&31;	cg=(rgb>>11)&31;	cr=(rgb>>3)&31;
+	i=(cr<<10)|(cg<<5)|cb;
+	j=btm_rgb555tobl[i];
+
+	return(j);
+}
+
 
 int BTM_UpdateGetBlockLightEbl(BTM_World *wrl, u32 blk)
 {
@@ -25,7 +105,7 @@ int BTM_UpdateGetBlockLightEbl(BTM_World *wrl, u32 blk)
 	if((j>0) && (j<4))
 //		return((blk>>12)&63);
 		return((blk>>12)&255);
-		
+
 	if(j==BTM_BLKTY_LAVA)
 		return((7<<4)|12);
 
@@ -48,6 +128,108 @@ int BTM_UpdateGetBlockLightEbl(BTM_World *wrl, u32 blk)
 	return(0);
 }
 
+#if 1
+int BTM_UpdateBlockLightBlendColors(BTM_World *wrl, int ls, int le)
+{
+	int cr1, cg1, cb1, cy1;
+	int cr2, cg2, cb2, cy2;
+	int cr3, cg3, cb3, cy3;
+	int cr4, cg4, cb4, cy4;
+	u32 rgb1, rgb2, rgb3;
+	int cl1, cl2, cl3, ci;
+	float f, g;
+	int lsc, lec;
+	int lc, lv;
+
+	
+	BTM_InitGetBlockLightForRgb();
+
+	if((le&0xF0) && ((le&0x0F)>2))
+	{
+		ci=-1;
+	}
+
+	if((le&15)==0)
+	{
+		if((ls&15)==0)
+			return(0);
+		return(ls);
+	}
+	if((ls&15)==0)
+	{
+		if((le&15)>1)
+			return(le-1);
+		return(0);
+	}
+
+//	if((le&15)>((ls&15)+1))
+//		return(le-1);
+//	if((le&15)<((ls&15)+1))
+//		return(ls);
+
+	if((le&15)>((ls&15)+2))
+		return(le-1);
+	if((le&15)<((ls&15)+2))
+		return(ls);
+
+	lv=ls&15;
+	if((le&15)>((ls&15)+1))
+		lv=(le&15)-1;
+
+	lsc=(ls>>4)&15;
+	lec=(le>>4)&15;
+
+	rgb1=btm_rgbblpal[ls];
+	rgb2=btm_rgbblpal[le];
+
+	cb1=(rgb1>>16)&255;		cg1=(rgb1>> 8)&255;		cr1=(rgb1>> 0)&255;
+	cb2=(rgb2>>16)&255;		cg2=(rgb2>> 8)&255;		cr2=(rgb2>> 0)&255;
+	
+	cr3=(cr2*15)>>4;
+	cg3=(cg2*15)>>4;
+	cb3=(cb2*15)>>4;
+//	if(cr1>cr3)	cr3=cr1;
+//	if(cg1>cg3)	cg3=cg1;
+//	if(cb1>cb3)	cb3=cb1;
+	
+	cy1=(2*cg1+cr1+cb1)/4;
+	cy2=(2*cg2+cr2+cb2)/4;
+	cy3=(2*cg3+cr3+cb3)/4;
+	
+	f=((cy3-cy1)*(1.0/512))+0.5;
+	cr4=(cr3*f)+(cr1*(1-f));
+	cg4=(cg3*f)+(cg1*(1-f));
+	cb4=(cb3*f)+(cb1*(1-f));
+	
+	cl1=ls&15;
+	cl2=le&15;
+	
+//	cl3=cl1;
+//	if((cl2-1)>cl3)
+//		cl3=cl2-1;
+
+	cl3=cl2-1;
+	if(cl1>cl3)
+		cl3=cl1;
+	
+//	cr3=cr1+((cr2*15)>>4);
+//	cg3=cg1+((cg2*15)>>4);
+//	cb3=cb1+((cb2*15)>>4);
+//	if(cr3>255)	cr3=255;
+//	if(cg3>255)	cg3=255;
+//	if(cb3>255)	cb3=255;
+	
+//	rgb3=(cb3<<16)|(cg3<<8)|(cr3<<0);
+	rgb3=(cb4<<16)|(cg4<<8)|(cr4<<0);
+	ci=BTM_GetBlockLightForRgb(rgb3);
+	
+	ci=(ci&0xF0)|cl3;
+	
+	return(ci);
+}
+#endif
+
+#if 0
 int BTM_UpdateBlockLightBlendColors(BTM_World *wrl, int ls, int le)
 {
 	static const u64 blendtab[16]={
@@ -124,6 +306,7 @@ int BTM_UpdateBlockLightBlendColors(BTM_World *wrl, int ls, int le)
 	lc=(lc<<4)|lv;
 	return(lc);
 }
+#endif
 
 int BTM_UpdateChunkFixVoidForRCix(BTM_World *wrl, u64 rcix)
 {
@@ -160,9 +343,10 @@ int BTM_UpdateBlockLightForRCixR(BTM_World *wrl, u64 rcix, int rcnt)
 {
 	u64 rcixa[6];
 	u32 blka[6];
-	u64 rcix1, rcix2;
+	u64 rcix1, rcix2, cpos;
 	u32 blk, blk1, blk2;
 	int lbl, lsl, ebl, esl, isair;
+	int cx, cy, cz;
 	int i, j, k;
 	
 	isair=1;
@@ -261,7 +445,7 @@ int BTM_UpdateBlockLightForRCixR(BTM_World *wrl, u64 rcix, int rcnt)
 				lsl=esl-1;
 		}
 	}
-
+	
 	blk2=blk;
 	blk2&=~(63<<18);
 	blk2&=~(63<<12);
@@ -269,6 +453,19 @@ int BTM_UpdateBlockLightForRCixR(BTM_World *wrl, u64 rcix, int rcnt)
 //	blk2|=(lsl<<18)|(lbl<<12);
 	blk2|=(lsl<<20)|(lbl<<12);
 	
+	if(((blk>>12)&15)>((blk2>>12)&15))
+	{
+		if(rcnt==257)
+		{
+			cpos=BTM_ConvRcixToBlkPos(rcix);
+			cx=(cpos>> 0)&65535;
+			cy=(cpos>>16)&65535;
+			cz=(cpos>>32)&255;
+
+			BTM_InstRelight(wrl, cx-16, cy-16, cz-16, cx+16, cy+16, cz+16);
+		}
+	}
+
 //	if((blk2==blk) || ((blk2|(1<<18))==blk))
 	if((blk2==blk) || ((blk2|(1<<20))==blk))
 		return(0);
@@ -287,6 +484,12 @@ int BTM_UpdateBlockLightForRCix(BTM_World *wrl, u64 rcix)
 {
 //	return(BTM_UpdateBlockLightForRCixR(wrl, rcix, 64));
 	return(BTM_UpdateBlockLightForRCixR(wrl, rcix, 256));
+}
+
+int BTM_UpdateBlockLightForRCixTick(BTM_World *wrl, u64 rcix)
+{
+//	return(BTM_UpdateBlockLightForRCixR(wrl, rcix, 64));
+	return(BTM_UpdateBlockLightForRCixR(wrl, rcix, 257));
 }
 
 int BTM_UpdateRegionSetBlockLightCix(BTM_World *wrl,
@@ -442,24 +645,42 @@ u32 BTM_GetColorRgbForBlockLight(int ll)
 
 		case 0x0: br=0xFF; bg=0xFF; bb=0xFF; break;
 
-		case 0x1: br=0x3F; bg=0x3F; bb=0xFF; break;
-		case 0x2: br=0x3F; bg=0xFF; bb=0x3F; break;
-		case 0x3: br=0x3F; bg=0xFF; bb=0xFF; break;
-		case 0x4: br=0xFF; bg=0x3F; bb=0x3F; break;
-		case 0x5: br=0xFF; bg=0x3F; bb=0xFF; break;
-		case 0x6: br=0xFF; bg=0xFF; bb=0x3F; break;
+//		case 0x1: br=0x3F; bg=0x3F; bb=0xFF; break;
+//		case 0x2: br=0x3F; bg=0xFF; bb=0x3F; break;
+//		case 0x3: br=0x3F; bg=0xFF; bb=0xFF; break;
+//		case 0x4: br=0xFF; bg=0x3F; bb=0x3F; break;
+//		case 0x5: br=0xFF; bg=0x3F; bb=0xFF; break;
+//		case 0x6: br=0xFF; bg=0xFF; bb=0x3F; break;
 
-		case 0x7: br=0xFF; bg=0x7F; bb=0x3F; break;
-		case 0x8: br=0x3F; bg=0x7F; bb=0xFF; break;
+		case 0x1: br=0x55; bg=0x55; bb=0xFF; break;
+		case 0x2: br=0x55; bg=0xFF; bb=0x55; break;
+		case 0x3: br=0x55; bg=0xFF; bb=0xFF; break;
+		case 0x4: br=0xFF; bg=0x55; bb=0x55; break;
+		case 0x5: br=0xFF; bg=0x55; bb=0xFF; break;
+		case 0x6: br=0xFF; bg=0xFF; bb=0x55; break;
 
-		case 0x9: br=0x7F; bg=0x7F; bb=0xFF; break;
-		case 0xA: br=0x7F; bg=0xFF; bb=0x7F; break;
-		case 0xB: br=0x7F; bg=0xFF; bb=0xFF; break;
-		case 0xC: br=0xFF; bg=0x7F; bb=0x7F; break;
-		case 0xD: br=0xFF; bg=0x7F; bb=0xFF; break;
-		case 0xE: br=0xFF; bg=0xFF; bb=0x7F; break;
+//		case 0x7: br=0xFF; bg=0x7F; bb=0x3F; break;
+//		case 0x8: br=0x3F; bg=0x7F; bb=0xFF; break;
 
-		case 0xF: br=0xFF; bg=0x3F; bb=0x7F; break;
+		case 0x7: br=0xFF; bg=0xAA; bb=0x55; break;
+		case 0x8: br=0x55; bg=0xAA; bb=0xFF; break;
+
+//		case 0x9: br=0x7F; bg=0x7F; bb=0xFF; break;
+//		case 0xA: br=0x7F; bg=0xFF; bb=0x7F; break;
+//		case 0xB: br=0x7F; bg=0xFF; bb=0xFF; break;
+//		case 0xC: br=0xFF; bg=0x7F; bb=0x7F; break;
+//		case 0xD: br=0xFF; bg=0x7F; bb=0xFF; break;
+//		case 0xE: br=0xFF; bg=0xFF; bb=0x7F; break;
+
+		case 0x9: br=0xAA; bg=0xAA; bb=0xFF; break;
+		case 0xA: br=0xAA; bg=0xFF; bb=0xAA; break;
+		case 0xB: br=0xAA; bg=0xFF; bb=0xFF; break;
+		case 0xC: br=0xFF; bg=0xAA; bb=0xAA; break;
+		case 0xD: br=0xFF; bg=0xAA; bb=0xFF; break;
+		case 0xE: br=0xFF; bg=0xFF; bb=0xAA; break;
+
+//		case 0xF: br=0xFF; bg=0x3F; bb=0x7F; break;
+		case 0xF: br=0xFF; bg=0x55; bb=0xAA; break;
 	}
 	
 	l=(ll&15)+1;
@@ -516,6 +737,7 @@ u32 BTM_ModulateColorRgbForBlockLight(u32 rgb, int ll)
 
 	switch(ll>>4)
 	{
+#if 0
 //		case 0: br=0xBF; bg=0xBF; bb=0xBF; break;
 //		case 1: br=0x3F; bg=0xBF; bb=0xFF; break;
 //		case 2: br=0xFF; bg=0x3F; bb=0xBF; break;
@@ -541,6 +763,26 @@ u32 BTM_ModulateColorRgbForBlockLight(u32 rgb, int ll)
 		case 0xE: br=0xFF; bg=0xFF; bb=0x7F; break;
 
 		case 0xF: br=0xFF; bg=0x3F; bb=0x7F; break;
+#endif
+
+#if 1
+		case 0x0: br=0xFF; bg=0xFF; bb=0xFF; break;
+		case 0x1: br=0x55; bg=0x55; bb=0xFF; break;
+		case 0x2: br=0x55; bg=0xFF; bb=0x55; break;
+		case 0x3: br=0x55; bg=0xFF; bb=0xFF; break;
+		case 0x4: br=0xFF; bg=0x55; bb=0x55; break;
+		case 0x5: br=0xFF; bg=0x55; bb=0xFF; break;
+		case 0x6: br=0xFF; bg=0xFF; bb=0x55; break;
+		case 0x7: br=0xFF; bg=0xAA; bb=0x55; break;
+		case 0x8: br=0x55; bg=0xAA; bb=0xFF; break;
+		case 0x9: br=0xAA; bg=0xAA; bb=0xFF; break;
+		case 0xA: br=0xAA; bg=0xFF; bb=0xAA; break;
+		case 0xB: br=0xAA; bg=0xFF; bb=0xFF; break;
+		case 0xC: br=0xFF; bg=0xAA; bb=0xAA; break;
+		case 0xD: br=0xFF; bg=0xAA; bb=0xFF; break;
+		case 0xE: br=0xFF; bg=0xFF; bb=0xAA; break;
+		case 0xF: br=0xFF; bg=0x55; bb=0xAA; break;
+#endif
 	}
 	
 	l=(ll&15)+1;
@@ -634,12 +876,16 @@ int BTM_BlockTickBlockForRCix(BTM_World *wrl, u64 rcix)
 	j=blk&255;
 	if(j && (j<4))
 	{
-		BTM_UpdateBlockLightForRCix(wrl, rcix);
+//		BTM_UpdateBlockLightForRCix(wrl, rcix);
+		BTM_UpdateBlockLightForRCixTick(wrl, rcix);
 		return(0);
 	}
 	
 	if(BTM_BlockIsTransparentP(wrl, blk))
-		BTM_UpdateBlockLightForRCix(wrl, rcix);
+	{
+//		BTM_UpdateBlockLightForRCix(wrl, rcix);
+		BTM_UpdateBlockLightForRCixTick(wrl, rcix);
+	}
 	
 	if(	(j==BTM_BLKTY_GRASS) ||
 		(j==BTM_BLKTY_MYCELIUM) ||

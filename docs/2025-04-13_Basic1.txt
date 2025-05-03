@@ -1,0 +1,87 @@
+Scripts may use a BASIC variant.
+* Names will be case sensitive.
+* Keywords may be either upper or lower case.
+* Typical variables will be in a global scope.
+** Though, the global names may also access console cvars.
+** For GOSUB, dynamic scoping will also exist.
+* Variables will be dynamically typed.
+
+Numbers:
+* Numbers will be integer or floating point.
+** Integer numbers will have a range of 2^62.
+** Floating point numbers will have roughly Binary64 precision.
+* Will use C style 0x notation for hexadecimal.
+
+Strings:
+* Will be quoted using double quotes;
+* Will use C style character escape notation.
+
+Keyword Commands:
+* DIM name(size)
+** Create an array.
+* END
+** Stop script
+* FOR var = initval to endval [STEP stepval]
+** Begin a FOR loop.
+** Loop finishes with a "NEXT var"
+** Loop is initialized to initval, and continues until endval.
+** If STEP is provided, it gives a step to apply for each loop.
+** Step defaults to 1.
+* GOSUB label [argslist]
+** Call to a label as a subroutine.
+** Returns via RETURN
+** ArgsList will be a comma-separated list of name=value pairs.
+*** These will be assigned as temporaries within the callee's scope.
+* GOTO label
+** Transfer control to a label.
+* IF cond GOTO label
+** If cond evaluates to non-zero, goto label
+* IF cond THEN statement
+** If cond evaluates to non-zero, perform statement
+* LET name=expr
+** Assign to a variable, creating if it does not exist.
+* NEXT var
+** Advance to the next cycle in a preceding FOR loop.
+* PRINT printexprlist
+* REM stuff
+** REM ignores any following tokens.
+* RETURN
+** Return from subroutine.
+* RETURN expr
+** Return from subroutine with return-value expression.
+* STOP
+** Stop script
+* TEMP name=expr
+** Create a temporary variable.
+** This variable will have a dynamic scope and only exists between a GOSUB/RETURN.
+* TEMP commalist
+** Create multiple temporary variables.
+
+Other Commands:
+* name:
+** label
+* name=expr
+** Assign to an existing variable.
+* concmd printexprlist
+** Print arguments and then pass resulting line to the console.
+* name = GOSUB label [argslist]
+** Like GOSUB but with a return value.
+** On "RETURN expr", the value of expr will be assigned to the variable.
+
+PrintExprList:
+* List of expressions for a PRINT and similar.
+* May use comma or semicolon as separators.
+* Comma, may whitespace pad between items.
+* Semicolon, no extra whitespace pad is added.
+* If list ends in semicolon, no newline is added.
+** Otherwise, a newline is added by default.
+
+
+Operator Precedence:
+* Unary: +, -, !, ~
+** Right associative.
+* Binary: *, /, %
+* Binary: +, -
+* Binary: &, |, ^
+* Binary: ==, !=, <, >, <=, >=
+

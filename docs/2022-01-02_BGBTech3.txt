@@ -60,6 +60,16 @@ Game Concepts (Working Idea):
 ** Stary night when above ground.
 
 
+=== Keys ===
+
+* '[': Previous Block
+* ']': Next Block
+* '\': Pick Block
+* INS: Add Block
+* DEL: Replace Block
+* BACKSPACE: Delete Block
+
+
 === Region Format ===
 
 Chunks/Regions:

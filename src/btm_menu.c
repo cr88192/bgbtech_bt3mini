@@ -40,6 +40,8 @@ int			btm_texfont_curi;
 
 int			btm_menu_inhibit;
 
+char		btm_menu_looktext[1024];
+
 int BTM_MenuInit()
 {
 	byte *buf;
@@ -254,7 +256,10 @@ char *BTM_MenuCheckInterpolateText(BTM_World *wrl, char *text)
 			}
 			*t1++=0;
 			
-			s1=BTM_InstGetVarStr(wrl, tn);
+			s1=BTM_PgmGetGlobalNameStr(wrl, tn);
+			if(!s1)
+				s1=BTM_InstGetVarStr(wrl, tn);
+
 			if(s1)
 			{
 				while(*s1)
@@ -279,6 +284,11 @@ char *BTM_MenuGetNodeAttrStr(BCCX_Node *node, char *name)
 	
 	if(!str)
 		return(NULL);
+
+	if(!strcmp(str, "$look"))
+	{
+		str=btm_menu_looktext;
+	}
 
 	if(str && (*str=='$'))
 	{
@@ -395,8 +405,10 @@ int BTM_LoadMenu(char *fname)
 
 int BTM_ShowMenu(char *name, char *subname)
 {
+	char tb[64];
 	BTM_Menu *mcur;
 	BCCX_Node *ncur;
+	char *ct;
 	
 	BTM_MenuInit();
 
@@ -426,6 +438,20 @@ int BTM_ShowMenu(char *name, char *subname)
 	if(subname)
 	{
 		ncur=BCCX_FindAttr(mcur->root, "name", subname);
+		
+		if(!ncur)
+		{
+			strcpy(tb, subname);
+			ct=tb+strlen(tb);
+			while((ct>tb) && (*ct!='.'))
+				ct--;
+			if(*ct=='.')
+			{
+				*ct=0;
+				ncur=BCCX_FindAttr(mcur->root, "name", tb);
+			}
+		}
+		
 		mcur->cur_node=ncur;
 		
 		if(!mcur->cur_node)
@@ -673,6 +699,12 @@ int BTM_DrawMenu()
 		{
 //			s0=BCCX_Get(mcur, "text");
 			s0=BTM_MenuGetNodeAttrStr(mcur, "text");
+			
+//			if(s0 && !strcmp(s0, "$look"))
+//			{
+//				s0=btm_menu_looktext;
+//			}
+//			s0=BTM_MenuCheckInterpolateText(btm_wrl, s0);
 		}
 
 		nface=NULL;

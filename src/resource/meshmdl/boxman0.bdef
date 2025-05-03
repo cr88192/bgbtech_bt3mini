@@ -1,0 +1,66 @@
+bone  0 base     0 (   0 0  0 )
+bone  1 hipbase  0 (   0 0 32 )
+bone  2 rleg1    1 (  -4 0 32 )
+bone  3 rleg2    2 (  -4 0 16 )
+bone  4 lleg1    1 (   4 0 32 )
+bone  5 lleg2    4 (   4 0 16 )
+
+bone  6 shldbase 1 (   0 0 48 )
+bone  7 headbase 6 (   0 0 52 )
+
+bone  8 rarm1    6 (  -5 0 50 )
+bone  9 rarm2    8 ( -17 0 50 )
+bone 10 rhand    9 ( -29 0 50 )
+
+bone 12 larm1    6 (   5 0 50 )
+bone 13 larm2   12 (  17 0 50 )
+bone 14 lhand   13 (  29 0 50 )
+
+animation stand 8 5
+
+frame 0
+arot  8 ( 0 -70 0 )
+arot  9 ( 0 41 -40 )
+arot 12 ( 0 70 0 )
+arot 13 ( 0 -40 40 )
+
+frame 2
+arot  8 ( 0 -70 0 )
+arot  9 ( 0 41 -40 )
+arot 12 ( 0 71 0 )
+arot 13 ( 0 -40 40 )
+
+frame 4
+arot  8 ( 0 -71 0 )
+arot  9 ( 0 40 -40 )
+arot 12 ( 0 71 0 )
+arot 13 ( 0 -40 40 )
+
+frame 6
+arot  8 ( 0 -71 0 )
+arot  9 ( 0 40 -40 )
+arot 12 ( 0 70 0 )
+arot 13 ( 0 -41 40 )
+
+animation walk 4 10
+
+frame 0
+
+aorg  2 ( 0 0 6 )
+aorg  4 ( 0 0 0 )
+
+arot  8 ( 0 -70 0 )
+arot  9 ( 0 40 -40 )
+arot 12 ( 0 70 0 )
+arot 13 ( 0 -40 40 )
+
+
+frame 2
+
+aorg  2 ( 0 0 0 )
+aorg  4 ( 0 0 6 )
+
+arot  8 ( 0 -70 0 )
+arot  9 ( 3 40 -40 )
+arot 12 ( 0 70 0 )
+arot 13 ( 3 -40 40 )

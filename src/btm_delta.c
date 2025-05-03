@@ -28,4 +28,5 @@ Chunk Delta:
 
 int BTM_ParseDelta(BTM_World *wrl, byte *msgbuf, int msgsz)
 {
+	return(0);
 }

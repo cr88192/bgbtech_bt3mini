@@ -29,6 +29,9 @@ u64 BTM_WorldCorgToRcix(u64 cpos);
 u32 BTM_GetWorldBlockCorg(BTM_World *wrl, u64 corg);
 u64 BTM_ConvRcixToBlkPos(u64 rcix);
 
+u64 BTM_RaycastDeltaVector(u64 spos, u64 epos);
+u64 BTM_CalcRayStepVector(u64 spos, u64 epos);
+
 u64 BTM_BlockOffsetRcix(u64 rcix, int dx, int dy, int dz);
 
 u64 BTM_BlockOffsetRcixPx1(u64 rcix);
@@ -518,9 +521,9 @@ int BTM_RaycastLineSingle(BTM_World *wrl, int max,
 
 //	if(blk_d&BTM_BLKDFL_SEETHRU)
 //	if(blk_d&(BTM_BLKDFL_SEETHRU|BTM_BLKDFL_FLUID))
-//	if((blk_d&(BTM_BLKDFL_SEETHRU|BTM_BLKDFL_FLUID)) && (n>48))
-	if((blk_d&(BTM_BLKDFL_SEETHRU|BTM_BLKDFL_FLUID)) && (n>48) &&
-		!(isair && (blk_d&BTM_BLKDFL_FLUID)))
+	if((blk_d&(BTM_BLKDFL_SEETHRU|BTM_BLKDFL_FLUID)) && (n>48))
+//	if((blk_d&(BTM_BLKDFL_SEETHRU|BTM_BLKDFL_FLUID)) && (n>48) &&
+//		!(isair && (blk_d&BTM_BLKDFL_FLUID)))
 //	if((blk_d&(BTM_BLKDFL_SEETHRU|BTM_BLKDFL_FLUID)) && (n>64))
 	{
 		i=BTM_RaycastTryAddHitCix(wrl, rcix);
@@ -1022,4 +1025,105 @@ int BTM_RaycastSceneQuad(BTM_World *wrl)
 	BTMGL_UnlockWorld();
 	
 	return(0);
+}
+
+
+
+u64 BTM_RaycastLineProbeSolid(BTM_World *wrl,
+	u64 spos, u64 epos, int flag)
+{
+	BTM_Region *rgn;
+	u64 *voxbm, *voxbmcs;
+	u16 *voxbmix;
+	u64 cpos, cstep, step;
+	u64 blk, clpos, rcix, rcix2, rlcix, recix;
+	u32 blk_v, blk_d;
+	int cx, cy, cz, cix, cix2, rx, ry, rix, rgix, rlix;
+	int adx, ady, adz, isqs, isair;
+	int cxm, czm, xsh, zsh, max;
+	int n, n1;
+	int i, j, k, h;
+
+//	step=BTM_RaycastDeltaVector(spos, epos);
+	step=BTM_CalcRayStepVector(spos, epos);
+	max=BTM_CalcRayDistApprox(spos, epos);
+
+	rcix=BTM_WorldCorgToRcix(spos);
+	recix=BTM_WorldCorgToRcix(epos);
+	rix=BTM_Rcix2Rix(rcix);
+	cix=BTM_Rcix2Cix(rcix);
+
+	rgn=BTM_GetRegionForRix(wrl, rix);
+	BTM_GenerateBaseRegion(wrl, rgn);
+	rgix=rix;
+	
+	voxbm=rgn->voxbm;
+	voxbmix=rgn->voxbmix;
+
+	n=max;
+	cpos=spos;
+	cstep=step;
+	clpos=cpos;
+	isair=1;
+
+	voxbmcs=voxbm+(voxbmix[cix>>12]<<6);
+	blk=voxbmcs[(cix>>6)&63];
+	if((blk>>(cix&63))&1)
+		return(cpos);
+
+	isqs=1;
+	if(flag&1)
+	{
+		isqs=2;
+	}
+
+	while(n>0)
+	{
+		while((n--)>0)
+		{
+			rcix=BTM_WorldCorgToRcix(cpos);
+			
+			if(rcix==recix)
+				return(epos);
+			
+			rix=BTM_Rcix2Rix(rcix);
+			cix=BTM_Rcix2Cix(rcix);
+			i=voxbmix[cix>>12];
+			j=(cix>>6)&63;
+			voxbmcs=voxbm+(i<<6);
+			k=(cix&63);
+			blk=voxbmcs[j];
+
+			if(rix!=rgix)
+				break;
+			if((blk>>k)&1)
+				break;
+
+			clpos=cpos;
+			cpos+=cstep;
+		}
+
+		if(rix!=rgix)
+		{
+			rgn=BTM_GetRegionForRix(wrl, rix);
+			BTM_GenerateBaseRegion(wrl, rgn);
+			rgix=rix;
+			voxbm=rgn->voxbm;
+			voxbmix=rgn->voxbmix;
+		}
+		
+		voxbmcs=voxbm+(voxbmix[cix>>12]<<6);
+		blk=voxbmcs[(cix>>6)&63];
+		if((blk>>(cix&63))&1)
+		{
+			break;
+		}
+		
+		clpos=cpos;
+		cpos+=cstep;
+	}
+
+	if(n<=0)
+		return(epos);
+	return(clpos);
 }

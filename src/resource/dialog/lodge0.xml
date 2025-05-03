@@ -1,0 +1,61 @@
+<structure name="lodge" root="lodge">
+	<object name="lodge">
+		<bmpkeys>
+			<key color="#FFFFFF" block="air"/>
+			<key color="#552A00" block="planks4"/>
+			<key color="#AA5500" block="planks4"/>
+			<key color="#0000AA" block="glass"/>
+			<key color="#55FFFF" block="lantwht"/>
+			<key color="#005500" block="grass"/>
+			<key color="#00AA00" block="grass"/>
+
+			<key color="#AAAAAA" block="cobble"/>
+			<key color="#AA00AA" block="somavio"/>
+			<key color="#FF55FF" block="somavio"/>
+			<key color="#5555FF" block="somablu"/>
+			<key color="#FF5555" block="somared"/>
+		</bmpkeys>
+
+		<fill min_x="-26" min_y="-50"
+			max_x="24" max_y="48"
+			min_z="0" max_z="24" block="air"/>
+		<fill min_x="-26" min_y="-50"
+			max_x="24" max_y="48"
+			min_z="0" max_z="0" block="grass"/>
+
+		<bmplayer image="tgen/lodge_f1s0.bmp" x="-22" y="-44" z="0" pl="0"/>
+		<bmplayer image="tgen/lodge_f1l0.bmp" x="-22" y="-44" z="1" pl="0"/>
+		<bmplayer image="tgen/lodge_f1l1.bmp" x="-22" y="-44" z="2" pl="0"/>
+		<bmplayer image="tgen/lodge_f1l2.bmp" x="-22" y="-44" z="3" pl="0"/>
+		<bmplayer image="tgen/lodge_f1l2b.bmp" x="-22" y="-44" z="4" pl="0"/>
+		<bmplayer image="tgen/lodge_f1l3.bmp" x="-22" y="-44" z="5" pl="0"/>
+
+		<bmplayer image="tgen/lodge_f2s0.bmp" x="-22" y="-44" z="6" pl="0"/>
+		<bmplayer image="tgen/lodge_f2l0.bmp" x="-22" y="-44" z="7" pl="0"/>
+		<bmplayer image="tgen/lodge_f2l1.bmp" x="-22" y="-44" z="8" pl="0"/>
+		<bmplayer image="tgen/lodge_f2l2.bmp" x="-22" y="-44" z="9" pl="0"/>
+		<bmplayer image="tgen/lodge_f2l2b.bmp" x="-22" y="-44" z="10" pl="0"/>
+		<bmplayer image="tgen/lodge_f2l3.bmp" x="-22" y="-44" z="11" pl="0"/>
+
+		<bmplayer image="tgen/lodge_f3s0.bmp" x="-24" y="-44" z="12" pl="0"/>
+		<bmplayer image="tgen/lodge_f3s0b.bmp" x="-24" y="-44" z="13" pl="0"/>
+		<bmplayer image="tgen/lodge_f3s1.bmp" x="-24" y="-44" z="14" pl="0"/>
+		<bmplayer image="tgen/lodge_f3s1b.bmp" x="-24" y="-44" z="15" pl="0"/>
+		<bmplayer image="tgen/lodge_f3s2.bmp" x="-24" y="-44" z="16" pl="0"/>
+		<bmplayer image="tgen/lodge_f3s2b.bmp" x="-24" y="-44" z="17" pl="0"/>
+		<bmplayer image="tgen/lodge_f3s3.bmp" x="-24" y="-44" z="18" pl="0"/>
+		<bmplayer image="tgen/lodge_f3s3.bmp" x="-24" y="-44" z="19" pl="0"/>
+		<bmplayer image="tgen/lodge_f3s4.bmp" x="-24" y="-44" z="20" pl="0"/>
+
+		<relight min_x="-24" min_y="-48"
+			max_x="24" max_y="48"
+			min_z="-3" max_z="24"/>
+		<relight min_x="-24" min_y="-48"
+			max_x="24" max_y="48"
+			min_z="-3" max_z="24"/>
+		<relight min_x="-24" min_y="-48"
+			max_x="24" max_y="48"
+			min_z="-3" max_z="24"/>
+	</object>
+
+</structure>

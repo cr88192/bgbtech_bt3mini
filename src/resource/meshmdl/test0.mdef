@@ -1,0 +1,6 @@
+// mesh bit0 meshmdl/driverbit0.stl
+mesh bit0 meshmdl/boxman0.stl
+scale bit0 0.5
+texture bit0 resource/gfx/002.tga [ 0.25 0 0 0 ] [ 0 0 0.25 0 ]
+texture bit0 resource/gfx/002.tga [ 0 0.25 0 0 ] [ 0 0 0.25 0 ]
+texture bit0 resource/gfx/002.tga [ 0.25 0 0 0 ] [ 0 0.25 0 0 ]

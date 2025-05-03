@@ -19,6 +19,61 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 BCCX_Node *BTM_LookupMenuNode(char *name, char *subname);
 
+char *btm_tgen_bmpcache_name[256];
+byte *btm_tgen_bmpcache_buf[256];
+byte *btm_tgen_bmpcache_pal[256];
+int btm_tgen_bmpcache_xs[256];
+int btm_tgen_bmpcache_ys[256];
+int btm_tgen_n_bmpcache;
+
+int BTM_TgenGetBmp8(char *name)
+{
+	byte tpal[1024];
+	byte *tbuf, *ibuf, *pal;
+	int i, n, nc, sz, xs, ys;
+	
+	for(i=0; i<btm_tgen_n_bmpcache; i++)
+	{
+		if(!strcmp(btm_tgen_bmpcache_name[i], name))
+			return(i);
+	}
+
+	tbuf=BTM_LoadFileTmp(name, &sz);
+	if(!tbuf)
+		return(-1);
+	
+	ibuf=BTM_LoadBmpIndex8(tbuf, tpal, &xs, &ys);
+	
+	if(!ibuf)
+		return(-1);
+	
+	n=xs*ys; nc=0;
+	for(i=0; i<n; i++)
+	{
+		if(ibuf[i]>=nc)
+			nc=ibuf[i]+1;
+	}
+	
+	if(nc<192)
+	{
+		pal=malloc(nc*4);
+		memcpy(pal, tpal, nc*4);
+	}else
+	{
+		pal=malloc(1024);
+		memcpy(pal, tpal, 1024);
+	}
+	
+	i=btm_tgen_n_bmpcache++;
+	btm_tgen_bmpcache_name[i]=bccx_strdup(name);
+	btm_tgen_bmpcache_buf[i]=ibuf;
+	btm_tgen_bmpcache_pal[i]=pal;
+	btm_tgen_bmpcache_xs[i]=xs;
+	btm_tgen_bmpcache_ys[i]=ys;
+	
+	return(i);
+}
+
 int btm_tgrand(BTM_World *wrl)
 {
 	u16 v;
@@ -474,8 +529,18 @@ int BTM_InstRelight(BTM_World *wrl,
 	int mcx, int mcy, int mcz,
 	int ncx, int ncy, int ncz)
 {
+	static int rec=0;
 	u64 rcix;
 	int x, y, z;
+
+	if(rec)
+		return(0);
+	rec=1;
+
+	if(ncz<0)
+		ncz=0;
+	if(ncz>127)
+		ncz=127;
 
 	for(z=mcz; z<=ncz; z++)
 		for(y=mcy; y<=ncy; y++)
@@ -495,6 +560,50 @@ int BTM_InstRelight(BTM_World *wrl,
 		BTM_UpdateBlockLightForRCix(wrl, rcix);
 	}
 
+	rec=0;
+	return(0);
+}
+
+int BTM_InstClearLight(BTM_World *wrl,
+	int mcx, int mcy, int mcz,
+	int ncx, int ncy, int ncz)
+{
+	static int rec=0;
+	u64 rcix;
+	u64 blk;
+	int x, y, z;
+
+	if(rec)
+		return(0);
+	rec=1;
+
+	if(ncz<0)
+		ncz=0;
+	if(ncz>127)
+		ncz=127;
+
+//	for(z=mcz; z<=ncz; z++)
+//		for(y=mcy; y<=ncy; y++)
+//			for(x=mcx; x<=ncx; x++)
+//	{
+//		rcix=BTM_BlockCoordsToRcix(x, y, z);
+//		BTM_UpdateWorldBlockOccCix2(wrl, rcix);
+//	}
+
+	for(z=mcz; z<=ncz; z++)
+		for(y=mcy; y<=ncy; y++)
+			for(x=mcx; x<=ncx; x++)
+	{
+		blk=BTM_GetWorldBlockXYZ(wrl, x, y, z);
+		blk&=(~0xFFFLL)<<12;
+		BTM_SetWorldBlockNlXYZ(wrl, x, y, z, blk);
+
+//		rcix=BTM_BlockCoordsToRcix(x, y, z);
+//		BTM_UpdateWorldBlockOccCix2(wrl, rcix);
+//		BTM_UpdateBlockLightForRCix(wrl, rcix);
+	}
+
+	rec=0;
 	return(0);
 }
 
@@ -595,8 +704,13 @@ char *BTM_InstGetVarStr(BTM_World *wrl, char *name)
 {
 	char tb[64];
 	BCCX_AttrVal *av;
+	char *s0;
 	int ix;
 	int i, j, k;
+
+//	s0=BTM_PgmGetGlobalNameStr(wrl, name);
+//	if(s0)
+//		{ return(s0); }
 
 	ix=BCCX_StringToStridx(name);
 
@@ -907,16 +1021,94 @@ int BTM_InstSetgVarStr(BTM_World *wrl, char *name, char *val)
 
 char *btm_curtopname;
 
+u32 btm_bmpkeys_rgb[256];
+u32 btm_bmpkeys_blk[256];
+BCCX_Node *btm_bmpkeys_ent[256];
+int btm_n_bmpkeys;
+
+int BTM_InstFillBmp(BTM_World *wrl,
+	int ocx, int ocy, int ocz,
+	int bmpidx, int plix)
+{
+	BCCX_Node *c;
+	byte *ics, *pal;
+	u32 tblk;
+	int cr, cg, cb;
+	int cx, cy, cz, ci, cj;
+	int x, y, z, xs, ys;
+
+	if(bmpidx<0)
+		return(-1);
+
+	ics=btm_tgen_bmpcache_buf[bmpidx];
+	pal=btm_tgen_bmpcache_pal[bmpidx];
+	xs=btm_tgen_bmpcache_xs[bmpidx];
+	ys=btm_tgen_bmpcache_ys[bmpidx];
+
+	for(y=0; y<ys; y++)
+		for(x=0; x<xs; x++)
+	{
+		switch(plix)
+		{
+		case 0: cx=ocx+x; cy=ocy+y; cz=ocz; break;
+		case 1: cx=ocx+x; cy=ocy; cz=ocz+y; break;
+		case 2: cx=ocx; cy=ocy+x; cz=ocz+y; break;
+		}
+
+//		z=ics[y*xs+x];
+		z=ics[y*xs+(xs-x-1)];
+		ci=(pal[z*4+0]<<16)|(pal[z*4+1]<<8)|(pal[z*4+2]<<0);
+		
+		for(cj=0; cj<btm_n_bmpkeys; cj++)
+		{
+			if(ci==btm_bmpkeys_rgb[cj])
+				break;
+		}
+		if(cj>=btm_n_bmpkeys)
+			continue;
+
+		if(btm_bmpkeys_ent[cj])
+		{
+			c=BCCX_Clone(btm_bmpkeys_ent[cj]);
+			BCCX_SetTag(c, "mobj");
+			BCCX_SetFloat(c, "org_x", cx+0.5);
+			BCCX_SetFloat(c, "org_y", cy+0.5);
+			BCCX_SetFloat(c, "org_z", cz+0.01);
+			BTM_SpawnWorldEntity(wrl, c);
+		}
+
+		tblk=btm_bmpkeys_blk[cj];
+		if(!(tblk&255))
+			continue;
+		
+		BTM_SetWorldBlockNlXYZ(wrl, cx, cy, cz, tblk);
+
+#if 0
+		if(rpblk)
+		{
+			tblk=BTM_GetWorldBlockXYZ(wrl, x, y, z);
+			if((tblk&255)==(rpblk&255))
+				BTM_SetWorldBlockNlXYZ(wrl, x, y, z, blk);
+		}else
+		{
+			BTM_SetWorldBlockNlXYZ(wrl, x, y, z, blk);
+		}
+#endif
+	}
+
+	return(0);
+}
+
 int BTM_InstanceStructureNodeAt(BTM_World *wrl,
 	int bcx, int bcy, int bcz, BCCX_Node *node)
 {
-	BCCX_Node *c;
+	BCCX_Node *c, *nd;
 	char *bty, *rpbty, *s0, *s1, *s2;
 	char *otop;
 	u32 blk, rpblk;
 	int ovspos, ovsmark;
-	int na, ci;
-	int mx, my, mz, nx, ny, nz;
+	int na, ci, cp;
+	int mx, my, mz, nx, ny, nz, cx, cy, cz;
 
 	if(!node)
 		return(0);
@@ -999,6 +1191,92 @@ int BTM_InstanceStructureNodeAt(BTM_World *wrl,
 			bcx+mx, bcy+my, bcz+mz,
 			bcx+nx, bcy+ny, bcz+nz,
 			blk, rpblk);
+		return(0);
+	}
+
+	if(BCCX_TagIsP(node, "rm_ents"))
+	{
+		mx=BTM_InstGetNodeAttrInt(wrl, node, "min_x");
+		my=BTM_InstGetNodeAttrInt(wrl, node, "min_y");
+		mz=BTM_InstGetNodeAttrInt(wrl, node, "min_z");
+		nx=BTM_InstGetNodeAttrInt(wrl, node, "max_x");
+		ny=BTM_InstGetNodeAttrInt(wrl, node, "max_y");
+		nz=BTM_InstGetNodeAttrInt(wrl, node, "max_z");
+		s0=BCCX_Get(node, "classname");
+
+		if(s0)
+		{
+			BTM_RemoveWorldEntitiesInBox(wrl, s0,
+				bcx+mx, bcy+my, bcz+mz,
+				bcx+nx, bcy+ny, bcz+nz);
+		}
+		return(0);
+	}
+
+	if(BCCX_TagIsP(node, "entity"))
+	{
+		cx=BTM_InstGetNodeAttrInt(wrl, node, "org_x");
+		cy=BTM_InstGetNodeAttrInt(wrl, node, "org_y");
+		cz=BTM_InstGetNodeAttrInt(wrl, node, "org_z");
+
+		c=BCCX_Clone(node);
+		BCCX_SetTag(c, "mobj");
+		BCCX_SetFloat(c, "org_x", cx+bcx+0.5);
+		BCCX_SetFloat(c, "org_y", cy+bcy+0.5);
+		BCCX_SetFloat(c, "org_z", cz+bcz+0.01);
+
+		BTM_SpawnWorldEntity(wrl, c);
+		return(0);
+	}
+
+	if(BCCX_TagIsP(node, "bmpkeys"))
+	{
+		btm_n_bmpkeys=0;
+	
+		na=BCCX_GetNodeChildCount(node);
+		for(ci=0; ci<na; ci++)
+		{
+			c=BCCX_GetNodeIndex(node, ci);
+//			BTM_InstanceStructureNodeAt(wrl, bcx, bcy, bcz, c);
+			if(BCCX_TagIsP(c, "key"))
+			{
+				s0=BCCX_Get(c, "color");
+				s1=BCCX_Get(c, "block");
+				nd=BCCX_FindTag(c, "entity");
+				
+				if(*s0=='#')
+				{
+					btm_bmpkeys_rgb[btm_n_bmpkeys]=strtoll(s0+1, NULL, 16);
+				}
+				
+				if(s1)
+				{
+					btm_bmpkeys_blk[btm_n_bmpkeys]=BTM_BlockForName(
+						wrl, s1);
+				}else
+				{
+					btm_bmpkeys_blk[btm_n_bmpkeys]=0;
+				}
+				btm_bmpkeys_ent[btm_n_bmpkeys]=nd;
+
+				btm_n_bmpkeys++;
+			}
+		}
+		return(0);
+	}
+
+	if(BCCX_TagIsP(node, "bmplayer"))
+	{
+		s0=BCCX_Get(node, "image");
+		ci=BTM_TgenGetBmp8(s0);
+
+		mx=BTM_InstGetNodeAttrInt(wrl, node, "x");
+		my=BTM_InstGetNodeAttrInt(wrl, node, "y");
+		mz=BTM_InstGetNodeAttrInt(wrl, node, "z");
+		cp=BTM_InstGetNodeAttrInt(wrl, node, "pl");
+	
+		BTM_InstFillBmp(wrl, bcx+mx, bcy+my, bcz+mz, ci, cp);
+
 		return(0);
 	}
 

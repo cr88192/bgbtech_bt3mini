@@ -118,7 +118,7 @@ int BTM_AabbCheckCollide(float *box1, float *box2)
 }
 
 int BTM_CheckWorldMoveBBoxBlockContents(BTM_World *wrl,
-	float *org, const float *bbox,
+	const float *org, const float *bbox,
 	int cx, int cy, int cz)
 {
 	float bboxen[6*6];
@@ -174,12 +174,14 @@ int BTM_CheckWorldMovePoint(BTM_World *wrl, float *org)
 	return(cont);
 }
 
-int BTM_CheckWorldMoveSpot(BTM_World *wrl, float *org, const float *bbox)
+int BTM_CheckWorldMoveSpot(BTM_World *wrl,
+	const float *org, const float *bbox, const float *vel)
 {
 	int cont;
 	int cxm, cxn, cym, cyn, czm, czn, cza;
 	u32 blk0, blk1, blk2, blk3;
 	u32 blk4, blk5, blk6, blk7;
+	int noenpts, ax;
 
 //	cxm=org[0]-0.35;
 //	cxn=org[0]+0.35;
@@ -198,6 +200,20 @@ int BTM_CheckWorldMoveSpot(BTM_World *wrl, float *org, const float *bbox)
 	czn=floor(org[2]+bbox[5]);
 	cza=floor(org[2]+(bbox[2]+bbox[5])*0.5);
 
+	if(fabs(vel[0])>fabs(vel[2]))
+	{
+		if(fabs(vel[0])>fabs(vel[1]))
+			{ ax=0; }
+		else
+			{ ax=1; }
+	}else
+	{
+		if(fabs(vel[1])>fabs(vel[2]))
+			{ ax=1; }
+		else
+			{ ax=2; }
+	}
+
 	if((cxm==cxn) && (cym==cyn))
 	{
 		cont=0;
@@ -215,67 +231,126 @@ int BTM_CheckWorldMoveSpot(BTM_World *wrl, float *org, const float *bbox)
 	}else
 	{
 
+		noenpts=0;
+		
+#if 1
+		if(vel[0]>1.5)
+			{ noenpts|=0x555; }
+		if(vel[0]<(-1.5))
+			{ noenpts|=0xAAA; }
+		if(vel[1]>1.5)
+			{ noenpts|=0x333; }
+		if(vel[1]<(-1.5))
+			{ noenpts|=0xCCC; }
+		if(vel[2]>1.5)
+			{ noenpts|=0x00F; }
+		if(vel[2]<(-1.5))
+			{ noenpts|=0x0F0; }
+
+		if(vel[0]>0.5)
+			{ noenpts&=~0xAAA; }
+		if(vel[0]<(-0.5))
+			{ noenpts&=~0x555; }
+		if(vel[1]>0.5)
+			{ noenpts&=~0xCCC; }
+		if(vel[1]<(-0.5))
+			{ noenpts&=~0x333; }
+		if(vel[2]>0.01)
+			{ noenpts&=~0x0F0; }
+		if(vel[2]<(-0.01))
+			{ noenpts&=~0x00F; }
+#endif
+		
+		if(!(noenpts&0x55))
+		{
+			if(cxm==cxn)
+				{ noenpts|=0xAAA; }
+		}
+
+		if(!(noenpts&0x33))
+		{
+			if(cym==cyn)
+				{ noenpts|=0xCCC; }
+		}
+
+		if(!(noenpts&0x0F))
+		{
+			if(czm==czn)
+				{ noenpts|=0xFF0; }
+		}
+
 	//	blk0=BTM_GetWorldBlockXYZ(wrl, org[0], org[1], org[2]-2);
 	//	blk1=BTM_GetWorldBlockXYZ(wrl, org[0], org[1], org[2]-1);
 
-		blk0=BTM_GetWorldBlockXYZ(wrl, cxm, cym, czm);
-		blk1=BTM_GetWorldBlockXYZ(wrl, cxn, cym, czm);
-		blk2=BTM_GetWorldBlockXYZ(wrl, cxm, cyn, czm);
-		blk3=BTM_GetWorldBlockXYZ(wrl, cxn, cyn, czm);
-
 		cont=0;
 
-		cont|=BTM_CheckWorldMoveBlockContents(wrl, blk0);
-		cont|=BTM_CheckWorldMoveBlockContents(wrl, blk1);
-		cont|=BTM_CheckWorldMoveBlockContents(wrl, blk2);
-		cont|=BTM_CheckWorldMoveBlockContents(wrl, blk3);
-
-
-	#if 1
-		if((cza!=czm) && (cza!=czn))
+		if(!(noenpts&0x01))
 		{
-			blk4=BTM_GetWorldBlockXYZ(wrl, cxm, cym, cza);
-			blk5=BTM_GetWorldBlockXYZ(wrl, cxn, cym, cza);
-			blk6=BTM_GetWorldBlockXYZ(wrl, cxm, cyn, cza);
-			blk7=BTM_GetWorldBlockXYZ(wrl, cxn, cyn, cza);
+			blk0=BTM_GetWorldBlockXYZ(wrl, cxm, cym, czm);
+			cont|=BTM_CheckWorldMoveBlockContents(wrl, blk0);
+		}
+		if(!(noenpts&0x02))
+		{
+			blk1=BTM_GetWorldBlockXYZ(wrl, cxn, cym, czm);
+			cont|=BTM_CheckWorldMoveBlockContents(wrl, blk1);
+		}
+		if(!(noenpts&0x04))
+		{
+			blk2=BTM_GetWorldBlockXYZ(wrl, cxm, cyn, czm);
+			cont|=BTM_CheckWorldMoveBlockContents(wrl, blk2);
+		}
+		if(!(noenpts&0x08))
+		{
+			blk3=BTM_GetWorldBlockXYZ(wrl, cxn, cyn, czm);
+			cont|=BTM_CheckWorldMoveBlockContents(wrl, blk3);
+		}
 
+		if(!(noenpts&0x10))
+		{
+			blk4=BTM_GetWorldBlockXYZ(wrl, cxm, cym, czn);
 			cont|=BTM_CheckWorldMoveBlockContents(wrl, blk4);
+		}
+		if(!(noenpts&0x20))
+		{
+			blk5=BTM_GetWorldBlockXYZ(wrl, cxn, cym, czn);
 			cont|=BTM_CheckWorldMoveBlockContents(wrl, blk5);
+		}
+		if(!(noenpts&0x40))
+		{
+			blk6=BTM_GetWorldBlockXYZ(wrl, cxm, cyn, czn);
 			cont|=BTM_CheckWorldMoveBlockContents(wrl, blk6);
+		}
+		if(!(noenpts&0x80))
+		{
+			blk7=BTM_GetWorldBlockXYZ(wrl, cxn, cyn, czn);
 			cont|=BTM_CheckWorldMoveBlockContents(wrl, blk7);
 		}
-	#endif
 
-	//	if(((blk0&255)>=2) && BTM_CheckWorldMoveBlockSolidP(wrl, blk0))
-	//		cont|=1;
-	//	if(((blk1&255)>=2) && BTM_CheckWorldMoveBlockSolidP(wrl, blk1))
-	//		cont|=1;
-	//	if(((blk2&255)>=2) && BTM_CheckWorldMoveBlockSolidP(wrl, blk2))
-	//		cont|=1;
-	//	if(((blk3&255)>=2) && BTM_CheckWorldMoveBlockSolidP(wrl, blk3))
-	//		cont|=1;
-
-		blk4=BTM_GetWorldBlockXYZ(wrl, cxm, cym, czn);
-		blk5=BTM_GetWorldBlockXYZ(wrl, cxn, cym, czn);
-		blk6=BTM_GetWorldBlockXYZ(wrl, cxm, cyn, czn);
-		blk7=BTM_GetWorldBlockXYZ(wrl, cxn, cyn, czn);
-
-	//	if(((blk4&255)>=2) && BTM_CheckWorldMoveBlockSolidP(wrl, blk4))
-	//		cont|=1;
-	//	if(((blk5&255)>=2) && BTM_CheckWorldMoveBlockSolidP(wrl, blk5))
-	//		cont|=1;
-	//	if(((blk6&255)>=2) && BTM_CheckWorldMoveBlockSolidP(wrl, blk6))
-	//		cont|=1;
-	//	if(((blk7&255)>=2) && BTM_CheckWorldMoveBlockSolidP(wrl, blk7))
-	//		cont|=1;
-
-		cont|=BTM_CheckWorldMoveBlockContents(wrl, blk4);
-		cont|=BTM_CheckWorldMoveBlockContents(wrl, blk5);
-		cont|=BTM_CheckWorldMoveBlockContents(wrl, blk6);
-		cont|=BTM_CheckWorldMoveBlockContents(wrl, blk7);
-
-	//	if((blk4|blk5|blk6|blk7)&2)
-	//		cont|=4;
+#if 1
+		if((cza!=czm) && (cza!=czn))
+		{
+			if(!(noenpts&0x100))
+			{
+				blk4=BTM_GetWorldBlockXYZ(wrl, cxm, cym, cza);
+				cont|=BTM_CheckWorldMoveBlockContents(wrl, blk4);
+			}
+			if(!(noenpts&0x200))
+			{
+				blk5=BTM_GetWorldBlockXYZ(wrl, cxn, cym, cza);
+				cont|=BTM_CheckWorldMoveBlockContents(wrl, blk5);
+			}
+			if(!(noenpts&0x400))
+			{
+				blk6=BTM_GetWorldBlockXYZ(wrl, cxm, cyn, cza);
+				cont|=BTM_CheckWorldMoveBlockContents(wrl, blk6);
+			}
+			if(!(noenpts&0x800))
+			{
+				blk7=BTM_GetWorldBlockXYZ(wrl, cxn, cyn, cza);
+				cont|=BTM_CheckWorldMoveBlockContents(wrl, blk7);
+			}
+		}
+#endif
 	}
 
 	if(cont&16)
@@ -347,7 +422,7 @@ int BTM_CheckWorldBoxMoveVel(BTM_World *wrl, float dt,
 	if(svel[2]>0)
 		fl&=~1;
 
-	cfl=BTM_CheckWorldMoveSpot(wrl, tdo, bbox);
+	cfl=BTM_CheckWorldMoveSpot(wrl, tdo, bbox, svel);
 
 	if(!(cfl&1))
 	{
@@ -379,7 +454,7 @@ int BTM_CheckWorldBoxMoveVel(BTM_World *wrl, float dt,
 		tdv[2]=0;
 
 		TKRA_Vec3F_AddScale(sorg, tdv, dt, tdo);
-		if(!(BTM_CheckWorldMoveSpot(wrl, tdo, bbox)&1))
+		if(!(BTM_CheckWorldMoveSpot(wrl, tdo, bbox, tdv)&1))
 		{
 			if(svel[2]<=0)
 				fl|=1;
@@ -400,7 +475,7 @@ int BTM_CheckWorldBoxMoveVel(BTM_World *wrl, float dt,
 //		tdo[2]+=0.5;
 		tdo[2]+=0.65;
 		
-		if(!(BTM_CheckWorldMoveSpot(wrl, tdo, bbox)&1))
+		if(!(BTM_CheckWorldMoveSpot(wrl, tdo, bbox, tdv)&1))
 		{
 //			if(svel[2]<0)
 //				fl|=1;
@@ -418,7 +493,7 @@ int BTM_CheckWorldBoxMoveVel(BTM_World *wrl, float dt,
 		tdv[0]=0;
 
 		TKRA_Vec3F_AddScale(sorg, tdv, dt, tdo);
-		if(!(BTM_CheckWorldMoveSpot(wrl, tdo, bbox)&1))
+		if(!(BTM_CheckWorldMoveSpot(wrl, tdo, bbox, tdv)&1))
 		{
 			TKRA_Vec3F_Copy(tdo, dorg);
 			TKRA_Vec3F_Copy(tdv, dvel);
@@ -433,7 +508,7 @@ int BTM_CheckWorldBoxMoveVel(BTM_World *wrl, float dt,
 		tdv[1]=0;
 
 		TKRA_Vec3F_AddScale(sorg, tdv, dt, tdo);
-		if(!(BTM_CheckWorldMoveSpot(wrl, tdo, bbox)&1))
+		if(!(BTM_CheckWorldMoveSpot(wrl, tdo, bbox, tdv)&1))
 		{
 			TKRA_Vec3F_Copy(tdo, dorg);
 			TKRA_Vec3F_Copy(tdv, dvel);
@@ -449,7 +524,7 @@ int BTM_CheckWorldBoxMoveVel(BTM_World *wrl, float dt,
 		tdv[0]=0;
 
 		TKRA_Vec3F_AddScale(sorg, tdv, dt, tdo);
-		if(!(BTM_CheckWorldMoveSpot(wrl, tdo, bbox)&1))
+		if(!(BTM_CheckWorldMoveSpot(wrl, tdo, bbox, tdv)&1))
 		{
 			if(svel[2]<=0)
 				fl|=1;
@@ -468,7 +543,7 @@ int BTM_CheckWorldBoxMoveVel(BTM_World *wrl, float dt,
 		tdv[1]=0;
 
 		TKRA_Vec3F_AddScale(sorg, tdv, dt, tdo);
-		if(!(BTM_CheckWorldMoveSpot(wrl, tdo, bbox)&1))
+		if(!(BTM_CheckWorldMoveSpot(wrl, tdo, bbox, tdv)&1))
 		{
 			if(svel[2]<=0)
 				fl|=1;
@@ -487,7 +562,7 @@ int BTM_CheckWorldBoxMoveVel(BTM_World *wrl, float dt,
 		tdv[1]=0;
 
 		TKRA_Vec3F_AddScale(sorg, tdv, dt, tdo);
-		if(!(BTM_CheckWorldMoveSpot(wrl, tdo, bbox)&1))
+		if(!(BTM_CheckWorldMoveSpot(wrl, tdo, bbox, tdv)&1))
 		{
 			TKRA_Vec3F_Copy(tdo, dorg);
 			TKRA_Vec3F_Copy(tdv, dvel);
@@ -496,17 +571,17 @@ int BTM_CheckWorldBoxMoveVel(BTM_World *wrl, float dt,
 		}
 	}
 
-	if(BTM_CheckWorldMoveSpot(wrl, sorg, bbox)&1)
-	{
-		tdv[0]=0;
-		tdv[1]=0;
-		tdv[2]=0;
+	tdv[0]=0;
+	tdv[1]=0;
+	tdv[2]=0;
 
+	if(BTM_CheckWorldMoveSpot(wrl, sorg, bbox, tdv)&1)
+	{
 //		TKRA_Vec3F_Copy(svel, tdv);
 		TKRA_Vec3F_Copy(sorg, tdo);
 		tdo[2]+=1.25;
 
-		if(!(BTM_CheckWorldMoveSpot(wrl, tdo, bbox)&1))
+		if(!(BTM_CheckWorldMoveSpot(wrl, tdo, bbox, tdv)&1))
 		{
 			TKRA_Vec3F_Copy(tdo, dorg);
 			TKRA_Vec3F_Copy(tdv, dvel);
@@ -522,7 +597,7 @@ int BTM_CheckWorldBoxMoveVel(BTM_World *wrl, float dt,
 			tdo[0]+=k*0.25;
 			tdo[1]+=j*0.25;
 			tdo[2]+=i*0.25;
-			if(!(BTM_CheckWorldMoveSpot(wrl, tdo, bbox)&1))
+			if(!(BTM_CheckWorldMoveSpot(wrl, tdo, bbox, tdv)&1))
 			{
 				TKRA_Vec3F_Copy(tdo, dorg);
 				TKRA_Vec3F_Copy(tdv, dvel);
@@ -547,7 +622,8 @@ int BTM_CheckWorldMoveVel(BTM_World *wrl, float dt,
 	float *sorg, float *svel,
 	float *dorg, float *dvel, int *rfl)
 {
-	static const float box[6] = { -0.35, -0.35, -1.7, 0.35, 0.35, 0.1};
+//	static const float box[6] = { -0.35, -0.35, -1.7, 0.35, 0.35, 0.1};
+	static const float box[6] = { -0.25, -0.25, -1.5, 0.25, 0.25, 0.1};
 	return(BTM_CheckWorldBoxMoveVel(wrl, dt,
 		sorg, svel, box, dorg, dvel, rfl));
 }

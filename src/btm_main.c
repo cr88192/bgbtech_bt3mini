@@ -29,6 +29,11 @@ int		SoundDev_WriteStereoSamples2(short *mixbuf, int nsamp, int nsamp2);
 void	SoundDev_Submit();
 int		SoundDev_Init();
 
+int BTM_GetMobCollideImpulse(
+	BTM_World *wrl,
+	float *ivel,
+	float *org, float radx, float radz);
+
 
 #ifdef _WIN32
 
@@ -719,6 +724,18 @@ int BTM_ConCmd_Time(BTM_ConCmd *cmd, char **args)
 	return(0);
 }
 
+int BTM_ConCmd_DoTime(BTM_ConCmd *cmd, char **args)
+{
+	if(args[1])
+	{
+		btm_wrl->dodaytimer=atoi(args[1]);
+	}else
+	{
+		BTM_ConPrintf("DoTime %d\n", btm_wrl->dodaytimer);
+	}
+	return(0);
+}
+
 int BTM_ConCmd_Instance(BTM_ConCmd *cmd, char **args)
 {
 	char tb[64];
@@ -753,6 +770,483 @@ int BTM_ConCmd_Instance(BTM_ConCmd *cmd, char **args)
 		BTM_InstanceStructureAt(btm_wrl,
 			cx, cy, cz, sn1, sn2);
 	}
+	return(0);
+}
+
+int BTM_ConCmd_RunPgm(BTM_ConCmd *cmd, char **args)
+{
+	if(args[1])
+	{
+		if(args[2])
+		{
+			BTM_PgmRun(btm_wrl, args[1], args[2]);
+		}else
+		{
+			BTM_PgmRun(btm_wrl, args[1], NULL);
+		}
+	}else
+	{
+		BTM_ConPrintf("Usage: runpgm <pgmname> [label]\n");
+	}
+	return(0);
+}
+
+int BTM_ConCmd_Eval(BTM_ConCmd *cmd, char **args)
+{
+	if(args[1])
+	{
+		BTM_ConPrintf("$ %s\n", args[1]);
+		BTM_PgmEval(btm_wrl, args[1]);
+	}else
+	{
+		BTM_ConPrintf("Usage: eval <line>\n");
+	}
+	return(0);
+}
+
+int BTM_ConCmd_ShowMenu(BTM_ConCmd *cmd, char **args)
+{
+	if(args[1])
+	{
+		if(args[2])
+		{
+			BTM_ShowMenu(args[1], args[2]);
+		}else
+		{
+			BTM_ShowMenu(args[1], NULL);
+		}
+	}else
+	{
+		BTM_ConPrintf("Usage: showmenu <pgmname> [label]\n");
+	}
+	return(0);
+}
+
+int BTM_ParseCamLocalBlockXYZ(char **a, int *rcx, int *rcy, int *rcz)
+{
+	int vx, vy, vz, cx, cy, cz;
+
+	vx=(btm_wrl->cam_org>> 0)&0xFFFFFF;
+	vy=(btm_wrl->cam_org>>24)&0xFFFFFF;
+	vz=(btm_wrl->cam_org>>48)&0x00FFFF;
+
+	vx>>=8;
+	vy>>=8;
+	vz>>=8;
+
+	if(a[0][0]=='~')
+		cx=vx+bccx_atoll(a[0]+1);
+	else
+		cx=bccx_atoll(a[0]);
+
+	if(a[1][0]=='~')
+		cy=vy+bccx_atoll(a[1]+1);
+	else
+		cy=bccx_atoll(a[1]);
+
+	if(a[2][0]=='~')
+		cz=vz+bccx_atoll(a[2]+1);
+	else
+		cz=bccx_atoll(a[2]);
+	
+	*rcx=cx;
+	*rcy=cy;
+	*rcz=cz;
+	return(0);
+}
+
+int BTM_ConCmd_Fill(BTM_ConCmd *cmd, char **args)
+{
+	int min_x, min_y, min_z, max_x, max_y, max_z;
+	int cx, cy, cz, vx, vy, vz;
+	char *blkname, *repname;
+	u32 setblk, repblk, tblk;
+	
+	if(	args[1] && args[2] &&
+		args[3] && args[4] &&
+		args[5] && args[6] &&
+		args[7])
+	{
+#if 0
+		vx=(btm_wrl->cam_org>> 0)&0xFFFFFF;
+		vy=(btm_wrl->cam_org>>24)&0xFFFFFF;
+		vz=(btm_wrl->cam_org>>48)&0x00FFFF;
+
+		if(args[1][0]=='~')
+			min_x=vx+bccx_atoll(args[1]+1);
+		else
+			min_x=bccx_atoll(args[1]);
+
+		if(args[2][0]=='~')
+			min_y=vy+bccx_atoll(args[2]+1);
+		else
+			min_y=bccx_atoll(args[2]);
+
+		if(args[3][0]=='~')
+			min_z=vz+bccx_atoll(args[3]+1);
+		else
+			min_z=bccx_atoll(args[3]);
+
+		max_x=bccx_atoll(args[4]);
+		max_y=bccx_atoll(args[5]);
+		max_z=bccx_atoll(args[6]);
+#endif
+
+		BTM_ParseCamLocalBlockXYZ(args+1, &min_x, &min_y, &min_z);
+		BTM_ParseCamLocalBlockXYZ(args+4, &max_x, &max_y, &max_z);
+
+		blkname=bccx_strdup(args[7]);
+		repname=NULL;
+		if(args[8] && !strcmp(args[8], "replace"))
+			repname=bccx_strdup(args[9]);
+
+		setblk=BTM_BlockForName(btm_wrl, blkname);
+		repblk=BTM_BlockForName(btm_wrl, repname);
+
+		BTM_InstFill(btm_wrl,
+			min_x, min_y, min_z,
+			max_x, max_y, max_z,
+			setblk, repblk);
+
+#if 0
+		for(cz=min_z; cz<=max_z; cz++)
+			for(cy=min_y; cy<=max_y; cy++)
+				for(cx=min_x; cx<=max_x; cx++)
+		{
+			if(repname)
+			{
+				tblk=BTM_GetWorldBlockXYZ(btm_wrl, cx, cy, cz);
+				if((tblk&255)!=(repblk&255))
+					continue;
+			}
+			BTM_SetWorldBlockXYZ(btm_wrl, cx, cy, cz, setblk);
+		}
+#endif
+	}else
+	{
+		BTM_ConPrintf("Usage: fill minx miny minz maxx maxy maxz "
+			"<fillblock> [replace <blockname>]\n");
+	}
+	return(0);
+}
+
+int BTM_ConCmd_Relight(BTM_ConCmd *cmd, char **args)
+{
+	int min_x, min_y, min_z, max_x, max_y, max_z;
+	int cx, cy, cz, vx, vy, vz;
+	char *blkname, *repname;
+	u32 setblk, repblk, tblk;
+	
+	if(	args[1] && args[2] &&
+		args[3] && args[4] &&
+		args[5] && args[6] )
+	{
+		BTM_ParseCamLocalBlockXYZ(args+1, &min_x, &min_y, &min_z);
+		BTM_ParseCamLocalBlockXYZ(args+4, &max_x, &max_y, &max_z);
+
+		BTM_InstRelight(btm_wrl,
+			min_x, min_y, min_z,
+			max_x, max_y, max_z);
+	}
+	else
+	{
+		vx=(btm_wrl->cam_org>> 0)&0xFFFFFF;
+		vy=(btm_wrl->cam_org>>24)&0xFFFFFF;
+		vz=(btm_wrl->cam_org>>48)&0x00FFFF;
+
+		vx>>=8;
+		vy>>=8;
+		vz>>=8;
+
+//		BTM_InstClearLight(btm_wrl,
+//			vx-32, vy-32, vz-8,
+//			vx+32, vy+32, vz+8);
+
+		BTM_InstRelight(btm_wrl,
+			vx-32, vy-32, vz-8,
+			vx+32, vy+32, vz+8);
+	}
+	return(0);
+}
+
+int BTM_ConCmd_Look(BTM_ConCmd *cmd, char **args)
+{
+	char *cansee_cname[256];
+	char *cansee_npcname[256];
+	BTM_MobEntity	*mob;
+	BTM_MobEntity	*mob_lookinfo;
+	char	**a;
+	char	*lookat;
+	char	*ct;
+	int n_cname, n_npcname;
+	int i, j, k;
+
+	lookat=NULL;
+	if(args[1])
+	{
+		if(!strcmp(args[1], "at"))
+		{
+			lookat=args[2];
+		}else
+		{
+			lookat=args[1];
+		}
+	}
+
+	if(lookat)
+	{
+		mob_lookinfo=NULL;
+
+		mob=btm_wrl->nearby_mobent;
+		while(mob)
+		{		
+			if(!BTM_CheckPlayerCanSeeMob(btm_wrl, mob, 24*256))
+			{
+				mob=mob->chain_near;
+				continue;
+			}
+			
+			if(!strcmp(mob->cname, lookat) ||
+				(mob->npcname && !strcmp(mob->npcname, lookat)))
+			{
+				if(!mob_lookinfo)
+				{
+					mob_lookinfo=mob;
+				}else
+				{
+					if(	BTM_CalcPlayerMobDistance(btm_wrl, mob) <
+						BTM_CalcPlayerMobDistance(btm_wrl, mob_lookinfo))
+					{
+						mob_lookinfo=mob;
+					}
+				}
+			}
+			
+			mob=mob->chain_near;
+		}
+
+		ct=btm_menu_looktext;
+		*ct=0;
+		
+		if(mob_lookinfo)
+		{
+			if(mob_lookinfo->looktext)
+			{
+				strcpy(ct, mob_lookinfo->looktext);
+			}else
+				if(mob_lookinfo->dfl_looktext)
+			{
+				strcpy(ct, mob_lookinfo->dfl_looktext);
+			}else
+			{
+				sprintf(ct, "You see nothing notable about %s\n", lookat);
+			}
+			ct+=strlen(ct);
+		}else
+		{
+			sprintf(ct, "You don't see %s\n", lookat);
+			ct+=strlen(ct);
+		}
+		
+		BTM_ShowMenu("main", "do_look");
+	}else
+	{
+		n_cname=0;
+		n_npcname=0;
+		mob_lookinfo=NULL;
+
+		mob=btm_wrl->nearby_mobent;
+		while(mob)
+		{
+			if(!strcmp(mob->cname, "lookinfo") &&
+				BTM_CheckPlayerCanSeeMob(btm_wrl, mob, 128*256))
+			{
+				if(!mob_lookinfo)
+				{
+					mob_lookinfo=mob;
+				}else
+				{
+					if(	BTM_CalcPlayerMobDistance(btm_wrl, mob) <
+						BTM_CalcPlayerMobDistance(btm_wrl, mob_lookinfo))
+					{
+						mob_lookinfo=mob;
+					}
+				}
+			}
+		
+			if(!BTM_CheckPlayerCanSeeMob(btm_wrl, mob, 24*256))
+			{
+				mob=mob->chain_near;
+				continue;
+			}
+			
+			for(i=0; i<n_cname; i++)
+				if(!strcmp(cansee_cname[i], mob->cname))
+					break;
+			if(i>=n_cname)
+			{
+				i=n_cname++;
+				cansee_cname[i]=mob->cname;
+			}
+			
+			if(mob->npcname)
+			{
+				for(i=0; i<n_npcname; i++)
+					if(!strcmp(cansee_npcname[i], mob->npcname))
+						break;
+				if(i>=n_npcname)
+				{
+					i=n_npcname++;
+					cansee_npcname[i]=mob->npcname;
+				}
+			}
+			
+			mob=mob->chain_near;
+		}
+		
+		ct=btm_menu_looktext;
+		*ct=0;
+		
+		if(mob_lookinfo)
+		{
+			if(mob_lookinfo->looktext)
+			{
+				if(!strncmp(mob_lookinfo->looktext, "$PGM ", 5))
+				{
+					a=bccx_split(mob_lookinfo->looktext);
+					btm_wrl->pgm_print_stdout_ct=btm_menu_looktext;
+					BTM_PgmRun(btm_wrl, a[1], a[2]);
+					btm_wrl->pgm_print_stdout_ct=NULL;
+				}else
+				{
+					strcpy(ct, mob_lookinfo->looktext);
+				}
+			}else
+				if(mob_lookinfo->dfl_looktext)
+			{
+				if(!strncmp(mob_lookinfo->dfl_looktext, "$PGM ", 5))
+				{
+					a=bccx_split(mob_lookinfo->dfl_looktext);
+					btm_wrl->pgm_print_stdout_ct=btm_menu_looktext;
+					BTM_PgmRun(btm_wrl, a[1], a[2]);
+					btm_wrl->pgm_print_stdout_ct=NULL;
+				}else
+				{
+					strcpy(ct, mob_lookinfo->dfl_looktext);
+				}
+			}else
+			{
+				sprintf(ct, "You see nothing notable\n", lookat);
+			}
+			ct+=strlen(ct);
+		}else
+		{
+	//		BTM_ConPrintf("You see nothing noteable\n");
+			sprintf(ct, "You see nothing noteable\n");
+			ct+=strlen(ct);
+		}
+		
+		for(i=0; i<n_cname; i++)
+		{
+	//		BTM_ConPrintf("%ss are here\n", cansee_cname[i]);
+			sprintf(ct, "%ss are here\n", cansee_cname[i]);
+			ct+=strlen(ct);
+		}
+
+		for(i=0; i<n_npcname; i++)
+		{
+	//		BTM_ConPrintf("%s is here\n", cansee_npcname[i]);
+			sprintf(ct, "%s is here\n", cansee_npcname[i]);
+			ct+=strlen(ct);
+		}
+
+		BTM_ShowMenu("main", "do_look");
+	}
+	return(0);
+}
+
+int BTM_ConCmd_Talk(BTM_ConCmd *cmd, char **args)
+{
+	char *cansee_cname[256];
+	char *cansee_npcname[256];
+	BTM_MobEntity	*mob;
+	BTM_MobEntity	*mob_lookinfo;
+	char	*lookat, *about;
+	char	**a1;
+	char *ct;
+	int n_cname, n_npcname;
+	int i, j, k;
+
+	lookat=NULL;
+	about=NULL;
+	if(args[1])
+	{
+		if(	!strcmp(args[1], "at") ||
+			!strcmp(args[1], "to"))
+		{
+			if(args[2])
+			{
+				lookat=args[2];
+				a1=args+3;
+			}else
+			{
+				return(0);
+			}
+		}else
+		{
+			lookat=args[1];
+			a1=args+2;
+		}
+
+		if(a1[0] && a1[1] && !strcmp(a1[0], "about"))
+		{
+			about=a1[1];
+		}
+	}
+
+	if(lookat)
+	{
+		mob_lookinfo=NULL;
+
+		mob=btm_wrl->nearby_mobent;
+		while(mob)
+		{		
+			if(!BTM_CheckPlayerCanSeeMob(btm_wrl, mob, 24*256))
+			{
+				mob=mob->chain_near;
+				continue;
+			}
+			
+			if(!strcmp(mob->cname, lookat) ||
+				(mob->npcname && !strcmp(mob->npcname, lookat)))
+			{
+				if(!mob_lookinfo)
+				{
+					mob_lookinfo=mob;
+				}else
+				{
+					if(	BTM_CalcPlayerMobDistance(btm_wrl, mob) <
+						BTM_CalcPlayerMobDistance(btm_wrl, mob_lookinfo))
+					{
+						mob_lookinfo=mob;
+					}
+				}
+			}
+			
+			mob=mob->chain_near;
+		}
+
+		if(mob_lookinfo)
+		{
+			BTM_EventPlayerTalkMob(btm_wrl, mob_lookinfo, about);
+		}else
+		{
+			BTM_ShowMenu("main", "not_here");
+		}
+
+//		BTM_ShowMenu("main", "do_look");
+	}
+
 	return(0);
 }
 
@@ -879,6 +1373,8 @@ int btm_raythreadproc(void *ptr)
 	return(0);
 }
 
+#ifndef BTM_NOMAIN
+
 int main(int argc, char *argv[])
 {
 	char tb[256];
@@ -910,7 +1406,17 @@ int main(int argc, char *argv[])
 //	BTM_ConAddCommand("noclip", BTM_ConCmd_Noclip);
 	BTM_ConAddCmdVar("noclip", BTM_ConCmd_Noclip, &btm_noclip, 0x3F);
 	BTM_ConAddCommand("time", BTM_ConCmd_Time);
+	BTM_ConAddCommand("dotime", BTM_ConCmd_DoTime);
 	BTM_ConAddCommand("instance", BTM_ConCmd_Instance);
+	BTM_ConAddCommand("runpgm", BTM_ConCmd_RunPgm);
+	BTM_ConAddCommand("eval", BTM_ConCmd_Eval);
+	BTM_ConAddCommand("showmenu", BTM_ConCmd_ShowMenu);
+	BTM_ConAddCommand("fill", BTM_ConCmd_Fill);
+	BTM_ConAddCommand("relight", BTM_ConCmd_Relight);
+
+	BTM_ConAddCommand("look", BTM_ConCmd_Look);
+	BTM_ConAddCommand("talk", BTM_ConCmd_Talk);
+	BTM_ConAddCommand("ask", BTM_ConCmd_Talk);
 
 	BTM_ConAddCvar("r_drawdist", &btm_drawdist, 0);
 	BTM_ConAddCvar("mlook", &btm_mlook, 0x3F);
@@ -954,6 +1460,7 @@ int main(int argc, char *argv[])
 
 //	btmgl_filter_min=GL_NEAREST_MIPMAP_NEAREST;
 	btmgl_filter_min=GL_NEAREST_MIPMAP_LINEAR;
+//	btmgl_filter_min=GL_LINEAR_MIPMAP_LINEAR;
 //	btmgl_filter_min=GL_LINEAR_MIPMAP_NEAREST;
 	btmgl_filter_max=GL_NEAREST;
 //	btmgl_filter_max=GL_LINEAR;
@@ -983,12 +1490,23 @@ int main(int argc, char *argv[])
 		TKRA_RGBA, TKRA_GL_UNSIGNED_SHORT_5_5_5_1, tex0);
 #endif
 
-	tbuf=BTM_LoadFileTmp("gfx/atlas0_2a.dds", &j);
+//	tbuf=BTM_LoadFileTmp("gfx/atlas0_2a.dds", &j);
+//	tbuf=BTM_LoadFileTmp("gfx/atlas0b_2a.dds", &j);
+	tbuf=BTM_LoadFileTmp("gfx/atlas0c_2a.dds", &j);
 //	tbuf=BTM_LoadFileTmp("gfx/atlas0_2b.dds", &j);
+//	tbuf=BTM_LoadFileTmp("gfx/atlas0_3a.dds", &j);
 	if(tbuf)
 	{
 		pglBindTexture(TKRA_TEXTURE_2D, 2);
 		BTMGL_UploadCompressed(tbuf, 1, 1);
+	}
+
+//	tbuf=BTM_LoadFileTmp("gfx/atlas0a_2a.dds", &j);
+	tbuf=BTM_LoadFileTmp("gfx/atlas0a_2c.dds", &j);
+	if(tbuf)
+	{
+		pglBindTexture(TKRA_TEXTURE_2D, 3);
+		BTMGL_UploadCompressed(tbuf, 0, 1);
 	}
 
 //	tex0=BTIC1H_Img_LoadTGA555("006.tga", &txs, &tys);
@@ -1086,6 +1604,7 @@ int main(int argc, char *argv[])
 	
 	pglClearColor(0.3, 0.6, 0.9, 1.0);
 	wrl->daytimer=360;
+	wrl->dodaytimer=1;
 
 //	BTM_LoadMenu("dialog/mainmenu0.xml");
 	BTM_LoadMenu("dialog/menus.xml");
@@ -1114,9 +1633,9 @@ int main(int argc, char *argv[])
 	if(wrl->cam_flags&2)
 		btm_mlook=1;
 
-//	BTM_PlaySong("music/PiTink1.mod");
+	BTM_PlaySong("music/PiTink1.mod");
 //	BTM_PlaySong("music/Life2.mod");
-	BTM_PlaySong("music/Life3.s3m");
+//	BTM_PlaySong("music/Life3.s3m");
 //	BTM_PlaySong("music/musix-shine.mod");
 //	BTM_PlaySong("music/kc-techrockloop.s3m");
 //	BTM_PlaySong("music/kj_jose_-_a_new_frontend.s3m");
@@ -1201,7 +1720,8 @@ int main(int argc, char *argv[])
 		btm_dopause=1;
 		if(!BTM_MenuDownP() && !BTM_ConDownP() && !BTM_InvenOpenP())
 		{
-			wrl->daytimer+=dt;
+			if(wrl->dodaytimer)
+				wrl->daytimer+=dt;
 			btm_dopause=0;
 		
 //			if(mb&2)
@@ -1385,15 +1905,22 @@ int main(int argc, char *argv[])
 				if(cam_mvflags&4)
 				{
 					frc=1.0-4*dtf;
-					cam_vel[2]=cam_vel[2]*frc+26*dtf;
+//					cam_vel[2]=cam_vel[2]*frc+26*dtf;
+					cam_vel[2]=cam_vel[2]*frc+14*dtf;
+//					cam_vel[2]=cam_vel[2]*frc;
 				}else
 					if(cam_mvflags&2)
 				{
 					frc=1.0-2*dtf;
-					cam_vel[2]=cam_vel[2]*frc+20*dtf;
+//					cam_vel[2]=cam_vel[2]*frc+20*dtf;
+					cam_vel[2]=cam_vel[2]*frc+12*dtf;
+					cam_vel[2]=cam_vel[2]*frc;
 				}
 
-				
+				BTM_GetMobCollideImpulse(
+					btm_wrl, cam_vel,
+					cam_org, 0.375, 1.8);
+
 				if(I_KeyDown(K_HOME))
 				{
 					if(cam_mvflags&1)
@@ -1829,3 +2356,5 @@ int main(int argc, char *argv[])
 	}
 	return(0);
 }
+
+#endif

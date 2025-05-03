@@ -16,6 +16,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 u32 btm_conbuf[40*25];
 byte btm_condown;
+byte btm_conchat;
 byte btm_con_x;
 byte btm_con_y;
 
@@ -28,6 +29,9 @@ short btm_con_tdt;
 short btm_con_msgdt;
 
 BTM_ConCmd	*btm_concmds;
+
+BTM_ConPgm	*btm_conpgms;
+BTM_ConPgm	*btm_runpgm;
 
 int BTM_ConAddCvar(char *name, void *ptr, int pty)
 {
@@ -422,6 +426,13 @@ int BTM_CvarSetInt(char *name, int val)
 	return(0);
 }
 
+int BTM_CvarSetFloat(char *name, double val)
+{
+	char tb[64];
+	sprintf(tb, "%f", val);
+	return(BTM_CvarSetStr(name, tb));
+}
+
 int BTM_CvarNudge(char *name, int key)
 {
 	char tb[256];
@@ -517,13 +528,24 @@ int BTM_ConsoleCommand(char *str)
 
 int BTM_ConHandleKey(u16 key)
 {
-	if(key=='`')
+//	if(BTM_InvenOpenP() || BTM_MenuDownP())
+	if(BTM_MenuDownP())
+		return(0);
+	
+	if((key=='`') && !btm_conchat)
 	{
 		btm_condown=!btm_condown;
+		btm_conchat=0;
 		return(0);
 	}
 
-	if(!btm_condown)
+	if((key=='/') && !btm_condown && !btm_conchat)
+	{
+		btm_conchat=1;
+		return(0);
+	}
+
+	if(!btm_condown && !btm_conchat)
 		return(0);
 	
 	if((key>=' ') && (key<='~'))
@@ -542,6 +564,7 @@ int BTM_ConHandleKey(u16 key)
 		btm_input_x=0;
 		btm_input_sx=0;
 		memset(btm_inputcmd, 0, 256);
+		btm_conchat=0;
 	}
 	
 	if(key==K_HOME)
@@ -595,7 +618,7 @@ int BTM_ConHandleKey(u16 key)
 
 int BTM_ConDownP()
 {
-	return(btm_condown);
+	return(btm_condown || btm_conchat);
 }
 
 int BTM_DrawConsole()
@@ -607,6 +630,31 @@ int BTM_DrawConsole()
 	{
 		BTM_DrawCharPrim(0, 0, 0, 0, 0, 0, 0);
 
+		if(btm_conchat)
+		{
+			f0=(9.0/16.0)+(1.0/256.0);
+			f1=(10.0/16.0)-(1.0/256.0);
+			f2=(3.0/16.0)+(1.0/256.0);
+			f3=(4.0/16.0)-(1.0/256.0);
+
+			pglColor4f(0.2, 0.2, 0.2, 0.75);
+			pglBindTexture(GL_TEXTURE_2D, 2);
+			pglBegin(GL_QUADS);
+			pglTexCoord2f(f0, f2);
+			pglVertex3f(-160, 100-23*8, 10);
+			pglTexCoord2f(f0, f3);
+			pglVertex3f(-160, 100-24*8, 10);
+			pglTexCoord2f(f1, f3);
+			pglVertex3f(160, 100-24*8, 10);
+			pglTexCoord2f(f1, f2);
+			pglVertex3f(160, 100-23*8, 10);
+
+			pglEnd();
+
+			pglDisable(GL_BLEND);
+			pglEnable(GL_ALPHA_TEST);
+		}
+
 		for(i=0; i<4; i++)
 			for(j=0; j<40; j++)
 		{
@@ -616,6 +664,28 @@ int BTM_DrawConsole()
 			BTM_DrawCharPrim(
 				(-160)+j*8, 100-((i+1)*8), 8, 8,
 				k&255, btm_texfont_8px, 0xFFFFFFFFU);
+		}
+
+
+		if(btm_conchat)
+		{
+			for(j=0; j<40; j++)
+			{
+				k=btm_inputcmd[btm_input_sx+j];
+
+				BTM_DrawCharPrim(
+					(-160)+j*8, 100-(24*8), 8, 8,
+					k&255, btm_texfont_8px, 0xFFFFFFFFU);
+			}
+			
+			j=btm_input_x-btm_input_sx;
+
+			if(btm_con_tdt&512)
+			{
+				BTM_DrawCharPrim(
+					(-160)+j*8-2, 100-(24*8)-2, 8, 12,
+					'I', btm_texfont_8px, 0xFFFFFFFFU);
+			}
 		}
 
 		BTM_DrawCharPrim(0, 0, 0, 0, 0, 0, 0);
@@ -693,3 +763,4 @@ int BTM_ConDoInput(int dt)
 	}
 	return(0);
 }
+

@@ -46,17 +46,65 @@ void TKRA_Vec3F_Scale(float *a, float b, float *c)
 	{ c[0]=a[0]*b; c[1]=a[1]*b; c[2]=a[2]*b; }
 void TKRA_Vec3F_AddScale(float *a, float *b, float s, float *c)
 	{ c[0]=b[0]*s+a[0]; c[1]=b[1]*s+a[1]; c[2]=b[2]*s+a[2]; }
+void TKRA_Vec3F_ScaleAddScale(float *a, float t, float *b, float s, float *c)
+	{ c[0]=b[0]*s+a[0]*t; c[1]=b[1]*s+a[1]*t; c[2]=b[2]*s+a[2]*t; }
 
 
+void TKRA_Vec4F_Add(float *a, float *b, float *c)
+	{ c[0]=b[0]+a[0]; c[1]=b[1]+a[1]; c[2]=b[2]+a[2]; c[3]=b[3]+a[3]; }
+void TKRA_Vec4F_Sub(float *a, float *b, float *c)
+	{ c[0]=a[0]-b[0]; c[1]=a[1]-b[1]; c[2]=a[2]-b[2]; c[3]=b[3]-a[3]; }
+void TKRA_Vec4F_Scale(float *a, float b, float *c)
+	{ c[0]=a[0]*b; c[1]=a[1]*b; c[2]=a[2]*b; c[3]=a[3]*b; }
+void TKRA_Vec4F_AddScale(float *a, float *b, float s, float *c)
+	{ c[0]=b[0]*s+a[0]; c[1]=b[1]*s+a[1]; c[2]=b[2]*s+a[2]; c[3]=b[3]*s+a[3]; }
+void TKRA_Vec4F_ScaleAddScale(float *a, float t, float *b, float s, float *c)
+	{ c[0]=b[0]*s+a[0]*t; c[1]=b[1]*s+a[1]*t; c[2]=b[2]*s+a[2]*t; c[3]=b[3]*s+a[3]*t; }
+
+
+void TKRA_Vec2F_Zero(float *b)
+	{ b[0]=0; b[1]=0; }
+void TKRA_Vec3F_Zero(float *b)
+	{ b[0]=0; b[1]=0; b[2]=0; }
+void TKRA_Vec4F_Zero(float *b)
+	{ b[0]=0; b[1]=0; b[2]=0; b[3]=0; }
+
+void TKRA_Vec2F_Copy(float *a, float *b)
+	{ b[0]=a[0]; b[1]=a[1]; }
 void TKRA_Vec3F_Copy(float *a, float *b)
 	{ b[0]=a[0]; b[1]=a[1]; b[2]=a[2]; }
 void TKRA_Vec4F_Copy(float *a, float *b)
 	{ b[0]=a[0]; b[1]=a[1]; b[2]=a[2]; b[3]=a[3]; }
 
+void TKRA_Vec3F_Min(float *a, float *b, float *c)
+{
+	c[0]=fmin(b[0], a[0]);
+	c[1]=fmin(b[1], a[1]);
+	c[2]=fmin(b[2], a[2]);
+}
+
+void TKRA_Vec3F_Max(float *a, float *b, float *c)
+{
+	c[0]=fmax(b[0], a[0]);
+	c[1]=fmax(b[1], a[1]);
+	c[2]=fmax(b[2], a[2]);
+}
+
+void TKRA_Vec2F_Set(float *b, float x, float y)
+	{ b[0]=x; b[1]=y; }
+void TKRA_Vec3F_Set(float *b, float x, float y, float z)
+	{ b[0]=x; b[1]=y; b[2]=z; }
+void TKRA_Vec4F_Set(float *b, float x, float y, float z, float w)
+	{ b[0]=x; b[1]=y; b[2]=z; b[3]=w; }
+
+
 float TKRA_Vec3F_DotProduct(float *a, float *b)
 	{ return((a[0]*b[0])+(a[1]*b[1])+(a[2]*b[2])); }
 float TKRA_Vec4F_DotProduct(float *a, float *b)
 	{ return((a[0]*b[0])+(a[1]*b[1])+(a[2]*b[2])+(a[3]*b[3])); }
+
+float TKRA_Vec3F_NDotProduct(float *a, float *b)
+	{ return((a[0]*b[0])+(a[1]*b[1])+(a[2]*b[2])-b[3]); }
 
 float TKRA_Vec3F_Normalize(float *a, float *b)
 {
@@ -274,4 +322,14 @@ void TKRA_DumpVec4(tkra_vec4f vec, char *str)
 	tkra_upvec4fv(xyz0, vec);
 	printf("%s  ", str);
 	printf("%f %f %f %f\n", xyz0[ 0], xyz0[ 1], xyz0[ 2], xyz0[ 3]);
+}
+
+float TKRA_Vec4F_Distance(float *a, float *b)
+{
+	float tv[4];
+	float f, g;
+
+	TKRA_Vec4F_Sub(a, b, tv);
+	f=sqrt(TKRA_Vec4F_DotProduct(tv, tv));
+	return(f);
 }

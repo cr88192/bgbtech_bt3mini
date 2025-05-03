@@ -1,4 +1,5 @@
 <loadfiles>
 	<loadmenu path="dialog/mainmenu0.xml"/>
 	<loadmenu path="dialog/house0.xml"/>
+	<loadmenu path="dialog/lodge0.xml"/>
 </loadfiles>
