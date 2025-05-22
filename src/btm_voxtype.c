@@ -60,7 +60,7 @@ static const u32 btmgl_vox_atlas_side[256]={
 0x00005555, 0x00005656, 0x06004F4F, 0x14003C3C,		/* 4C-4F */
 0x00001010,	0x00001111,	0x46005E5E, 0x46006E6E,		/* 50-53 */
 0x46005F5F, 0x46006F6F, 0x46007E7E, 0x46007F7F,		/* 54-57 */
-0x00004646, 0x00004747,
+0x00004646, 0x00004747, 0x36007E7E
 };
 
 static const byte btmgl_vox_hrsc[256]={
@@ -75,7 +75,7 @@ static const byte btmgl_vox_hrsc[256]={
 0x00, 0x7F, 0x10, 0x7F, 0x7F, 0x7F, 0x7F, 0x7F,		/* 40-47 */
 0x7F, 0x7F, 0x7F, 0x7F, 0x10, 0x10, 0x10, 0x10,		/* 48-4F */
 0x7F, 0x7F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,		/* 50-57 */
-0x30, 0x30,
+0x30, 0x30, 0x00,
 };
 
 
@@ -116,6 +116,21 @@ int BTM_BlockIsTransparentP(BTM_World *wrl, u32 blk)
 			BTM_BLKDFL_FLUID|BTM_BLKDFL_NODRAW|
 			BTM_BLKDFL_SEETHRU|BTM_BLKDFL_TY_MASK))
 		return(1);
+	return(0);
+}
+
+int BTM_BlockIsLightP(BTM_World *wrl, u32 blk)
+{
+	int j, ebl;
+
+	j=blk&255;
+	if(j<4)
+		return(0);
+
+	ebl=BTM_UpdateGetBlockLightEbl(wrl, blk&0x0FFF);
+	if(ebl>0)
+		return(1);
+
 	return(0);
 }
 
@@ -173,7 +188,7 @@ char *btm_blkmininames[256]={
 "GrsFgBlu",	"GrsFgRed",	"Ladder",	"HayNest",		//4C..4F
 "BgBrkBrn",	"BgBrkGry", "Wheat",    "Carrots",		//50..53
 "Beets",    "Potatoes", "PumpVine", "MelnVine",		//54..57
-"Planks3",	"Planks4",
+"Planks3",	"Planks4",	"Sconce",
 NULL
 };
 

@@ -40,7 +40,7 @@ int			btm_texfont_curi;
 
 int			btm_menu_inhibit;
 
-char		btm_menu_looktext[1024];
+// char		btm_menu_looktext[1024];
 
 int BTM_MenuInit()
 {
@@ -408,6 +408,7 @@ int BTM_ShowMenu(char *name, char *subname)
 	char tb[64];
 	BTM_Menu *mcur;
 	BCCX_Node *ncur;
+	char *s0, *s1;
 	char *ct;
 	
 	BTM_MenuInit();
@@ -474,6 +475,16 @@ int BTM_ShowMenu(char *name, char *subname)
 		}
 	}
 	
+	if(mcur->cur_node)
+	{
+		s1=BCCX_Get(mcur->cur_node, "playsound");
+		if(s1)
+		{
+			BTM_PlaySample(s1, 128);
+		}
+	}
+
+	
 	return(0);
 }
 
@@ -523,9 +534,9 @@ int BTM_DrawMenu()
 {
 	BCCX_Node *mcur, *c, *nface;
 	char *s0, *s1, *s2, *s3;
-	char *scvn, *scvv;
+	char *scvn, *scvv, *needinven, *exclinven, *addinven;
 	float f0, f1, f2, f3;
-	int na, ci, nopt, tex, fibase;
+	int na, ci, nopt, tex, fibase, invcnt;
 	int i, j, k, l;
 
 	BTM_MenuInit();
@@ -556,6 +567,19 @@ int BTM_DrawMenu()
 
 			if(BCCX_TagIsP(c, "option"))
 			{
+				needinven=BTM_MenuGetNodeAttrStr(c, "need_inven");
+				exclinven=BTM_MenuGetNodeAttrStr(c, "excl_inven");
+				if(needinven)
+				{
+					if(!BTM_InvenCheckHasName(btm_wrl, needinven))
+						continue;
+				}
+				if(exclinven)
+				{
+					if(BTM_InvenCheckHasName(btm_wrl, exclinven))
+						continue;
+				}
+			
 				scvv=NULL;
 //				scvn=BCCX_Get(c, "cvar");
 				scvn=BTM_MenuGetNodeAttrStr(c, "cvar");
@@ -769,6 +793,19 @@ int BTM_DrawMenu()
 
 			if(BCCX_TagIsP(c, "option"))
 			{
+				needinven=BTM_MenuGetNodeAttrStr(c, "need_inven");
+				exclinven=BTM_MenuGetNodeAttrStr(c, "excl_inven");
+				if(needinven)
+				{
+					if(!BTM_InvenCheckHasName(btm_wrl, needinven))
+						continue;
+				}
+				if(exclinven)
+				{
+					if(BTM_InvenCheckHasName(btm_wrl, exclinven))
+						continue;
+				}
+			
 //				s1=BCCX_Get(c, "text");
 				s1=BTM_MenuGetNodeAttrStr(c, "text");
 				if(s1)
@@ -790,6 +827,16 @@ int BTM_DrawMenu()
 						s1=BTM_MenuGetNodeAttrStr(c, "goname");
 //						s2=BCCX_Get(c, "gosubname");
 						s2=BTM_MenuGetNodeAttrStr(c, "gosubname");
+
+						addinven=BTM_MenuGetNodeAttrStr(c, "addinven_name");
+						invcnt=BTM_MenuGetNodeAttrInt(c, "addinven_cnt");
+
+						if(addinven)
+						{
+							if(!invcnt)
+								invcnt=1;
+							BTM_InvenAddHasName(btm_wrl, addinven, invcnt);
+						}
 
 						if(s1)
 						{

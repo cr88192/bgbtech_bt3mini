@@ -125,6 +125,9 @@ int BTM_UpdateGetBlockLightEbl(BTM_World *wrl, u32 blk)
 	if(j==BTM_BLKTY_LANTERN_YEL)
 		return((6<<4)|15);
 
+	if(j==BTM_BLKTY_SCONCE)
+		return((0<<4)|15);
+
 	return(0);
 }
 
@@ -345,7 +348,7 @@ int BTM_UpdateBlockLightForRCixR(BTM_World *wrl, u64 rcix, int rcnt)
 	u32 blka[6];
 	u64 rcix1, rcix2, cpos;
 	u32 blk, blk1, blk2;
-	int lbl, lsl, ebl, esl, isair;
+	int lbl, lsl, ebl, esl, isair, ebl1;
 	int cx, cy, cz;
 	int i, j, k;
 	
@@ -416,8 +419,16 @@ int BTM_UpdateBlockLightForRCixR(BTM_World *wrl, u64 rcix, int rcnt)
 //		if((j>0) && (j<4))
 		if(BTM_BlockIsTransparentP(wrl, blk1))
 		{
-//			ebl=((blk1>>12)&63);
-			ebl=((blk1>>12)&255);
+			if(BTM_BlockIsLightP(wrl, blk1))
+			{
+				ebl1=((blk1>>12)&255);
+				if((ebl1&15)>(ebl&15))
+					ebl=ebl1;
+			}else
+			{
+//				ebl=((blk1>>12)&63);
+				ebl=((blk1>>12)&255);
+			}
 //			esl=((blk1>>18)&63);
 			esl=((blk1>>20)&15);
 		}
@@ -866,11 +877,173 @@ int BTM_UpdateBlockPlantForRCix(BTM_World *wrl, u64 rcix)
 	return(0);
 }
 
+int BTM_CameraDistanceToRCix(BTM_World *wrl, u64 rcix)
+{
+	u64 cpos;
+	int vx, vy, vz, cx, cy, cz;
+	int dx, dy, dz, d0, d1, d2, d;
+
+	vx=(wrl->cam_org>> 0)&0xFFFFFF;
+	vy=(wrl->cam_org>>24)&0xFFFFFF;
+	vz=(wrl->cam_org>>48)&0x00FFFF;
+	
+	vx>>=8;
+	vy>>=8;
+	vz>>=8;
+
+	cpos=BTM_ConvRcixToBlkPos(rcix);
+	cx=(cpos>> 0)&65535;
+	cy=(cpos>>16)&65535;
+	cz=(cpos>>32)&255;
+	
+	dx=(s16)(vx-cx);
+	dy=(s16)(vy-cy);
+	dz=(s16)(vz-cz);
+
+	dx^=dx>>31;
+	dy^=dy>>31;
+	dz^=dz>>31;
+
+	d0=dx;	d1=dy;	d2=dz;
+	if(d0<d1)	{ d=d0; d0=d1; d1=d; }
+	if(d1<d2)	{ d=d1; d2=d2; d2=d; }
+	if(d0<d1)	{ d=d0; d0=d1; d1=d; }
+
+	d=d0+(d1>>1)+(d2>>2);
+
+//	if(dx>dy)
+//		d=dx+(dy>>1);
+//	else
+//		d=dy+(dx>>1);
+
+	return(d);
+}
+
+int BTM_CameraDistanceToBlkPos(BTM_World *wrl, u64 cpos)
+{
+	int vx, vy, vz, cx, cy, cz;
+	int dx, dy, dz, d0, d1, d2, d;
+
+	vx=(wrl->cam_org>> 0)&0xFFFFFF;
+	vy=(wrl->cam_org>>24)&0xFFFFFF;
+	vz=(wrl->cam_org>>48)&0x00FFFF;
+	
+	vx>>=8;
+	vy>>=8;
+	vz>>=8;
+
+	cx=(cpos>> 0)&65535;
+	cy=(cpos>>16)&65535;
+	cz=(cpos>>32)&255;
+	
+	dx=(s16)(vx-cx);
+	dy=(s16)(vy-cy);
+	dz=(s16)(vz-cz);
+
+	dx^=dx>>31;
+	dy^=dy>>31;
+	dz^=dz>>31;
+
+	d0=dx;	d1=dy;	d2=dz;
+	if(d0<d1)	{ d=d0; d0=d1; d1=d; }
+	if(d1<d2)	{ d=d1; d2=d2; d2=d; }
+	if(d0<d1)	{ d=d0; d0=d1; d1=d; }
+
+	d=d0+(d1>>1)+(d2>>2);
+
+	return(d);
+}
+
+
+int BTM_CameraDistanceToCPos(BTM_World *wrl, u64 cpos)
+{
+	int vx, vy, vz, cx, cy, cz;
+	int dx, dy, dz, d0, d1, d2, d;
+
+	vx=(wrl->cam_org>> 0)&0xFFFFFF;
+	vy=(wrl->cam_org>>24)&0xFFFFFF;
+	vz=(wrl->cam_org>>48)&0x00FFFF;
+	
+	vx>>=8;
+	vy>>=8;
+	vz>>=8;
+
+	cx=(cpos>> 0)&0xFFFFFF;
+	cy=(cpos>>24)&0xFFFFFF;
+	cz=(cpos>>48)&0x00FFFF;
+	
+	cx>>=8;
+	cy>>=8;
+	cz>>=8;
+
+	dx=(s16)(vx-cx);
+	dy=(s16)(vy-cy);
+	dz=(s16)(vz-cz);
+
+	dx^=dx>>31;
+	dy^=dy>>31;
+	dz^=dz>>31;
+
+	d0=dx;	d1=dy;	d2=dz;
+	if(d0<d1)	{ d=d0; d0=d1; d1=d; }
+	if(d1<d2)	{ d=d1; d2=d2; d2=d; }
+	if(d0<d1)	{ d=d0; d0=d1; d1=d; }
+
+	d=d0+(d1>>1)+(d2>>2);
+
+	return(d);
+}
+
+int BTM_CameraDistanceToCoords(BTM_World *wrl, int cx0, int cy0, int cz0)
+{
+	int vx, vy, vz, cx, cy, cz;
+	int dx, dy, dz, d0, d1, d2, d;
+
+	vx=(wrl->cam_org>> 0)&0xFFFFFF;
+	vy=(wrl->cam_org>>24)&0xFFFFFF;
+	vz=(wrl->cam_org>>48)&0x00FFFF;
+	
+	vx>>=8;
+	vy>>=8;
+	vz>>=8;
+	
+	cx=cx0;
+	cy=cy0;
+	cz=cz0;
+	
+//	if((vx<( 64*128)) && (cx>(192*128)))	cx-=512*128;
+//	if((vy<( 64*128)) && (cy>(192*128)))	cy-=512*128;
+//	if((vx>(192*128)) && (cx<( 64*128)))	cx+=512*128;
+//	if((vy>(192*128)) && (cy<( 64*128)))	cy+=512*128;
+	
+	dx=(s16)(vx-cx);
+	dy=(s16)(vy-cy);
+	dz=(s16)(vz-cz);
+
+	dx^=dx>>31;
+	dy^=dy>>31;
+	dz^=dz>>31;
+
+	d0=dx;	d1=dy;	d2=dz;
+	if(d0<d1)	{ d=d0; d0=d1; d1=d; }
+	if(d1<d2)	{ d=d1; d2=d2; d2=d; }
+	if(d0<d1)	{ d=d0; d0=d1; d1=d; }
+
+	d=d0+(d1>>1)+(d2>>2);
+
+	return(d);
+}
+
 int BTM_BlockTickBlockForRCix(BTM_World *wrl, u64 rcix)
 {
 	u32 blk, blk1, blk2;
 	int lbl, lsl, ebl, esl;
-	int i, j, k;
+	int i, j, k, d;
+	
+	d=BTM_CameraDistanceToRCix(wrl, rcix);
+	
+	if(d>=(btm_drawdist>>1))
+		return(0);
 	
 	blk=BTM_GetWorldBlockCix(wrl, rcix);
 	j=blk&255;
@@ -1081,6 +1254,76 @@ int BTM_BlockTickWorldI(BTM_World *wrl)
 		rnxt=rgn->next;
 		BTM_BlockTickRegion(wrl, rgn);
 		rgn=rnxt;
+	}
+
+	return(0);
+}
+
+int BTM_TickWorldForRaycast(BTM_World *wrl)
+{
+	BTM_Region *rgn, *rnxt;
+	u64 rpos;
+	int cx, cy, cz, vx, vy, dx, dy, d;
+	int i, j, k;
+
+	vx=(wrl->cam_org>> 8)&0xFFFF;
+	vy=(wrl->cam_org>>32)&0xFFFF;
+
+	BTMGL_TickRaIxChidReservations();
+	
+	rgn=wrl->region;
+	while(rgn)
+	{
+		for(i=0; i<512; i++)
+		{
+			j=rgn->chkhit[i];
+			if(j>0)		j--;
+			rgn->chkhit[i]=j;
+		}
+		
+		for(cy=0; cy<8; cy++)
+			for(cx=0; cx<8; cx++)
+		{
+			k=0;
+			for(cz=0; cz<8; cz++)
+			{
+				j=(cz<<6)+(cy<<3)+cx;
+				j=rgn->chkhit[j];
+				if(j>k)
+					k=j;
+			}
+			rgn->facehit[(cy<<3)+cx]=k;
+		}
+
+		for(cz=0; cz<8; cz++)
+			for(cx=0; cx<8; cx++)
+		{
+			k=0;
+			for(cy=0; cy<8; cy++)
+			{
+				j=(cz<<6)+(cy<<3)+cx;
+				j=rgn->chkhit[j];
+				if(j>k)
+					k=j;
+			}
+			rgn->facehit[128+(cz<<3)+cx]=k;
+		}
+
+		for(cz=0; cz<8; cz++)
+			for(cy=0; cy<8; cy++)
+		{
+			k=0;
+			for(cx=0; cx<8; cx++)
+			{
+				j=(cz<<6)+(cy<<3)+cx;
+				j=rgn->chkhit[j];
+				if(j>k)
+					k=j;
+			}
+			rgn->facehit[64+(cz<<3)+cy]=k;
+		}
+
+		rgn=rgn->next;
 	}
 
 	return(0);

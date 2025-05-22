@@ -14,6 +14,8 @@
 			<key color="#FF55FF" block="somavio"/>
 			<key color="#5555FF" block="somablu"/>
 			<key color="#FF5555" block="somared"/>
+
+			<key color="#FFFF55" block="sconce"/>
 		</bmpkeys>
 
 		<fill min_x="-26" min_y="-50"
@@ -56,6 +58,103 @@
 		<relight min_x="-24" min_y="-48"
 			max_x="24" max_y="48"
 			min_z="-3" max_z="24"/>
+
+		<rm_ents min_x="-52" min_y="-100"
+			max_x="52" max_y="100"
+			min_z="0" max_z="24"
+			classname="lookinfo"/>
+		
+		<rm_ents min_x="-52" min_y="-100"
+			max_x="52" max_y="100"
+			min_z="0" max_z="24"
+			classname="prop"/>
+		
+		<entity org_x="10" org_y="28" org_z="4"
+			classname="lookinfo" looktext="$PGM looktext study"/>
+		<entity org_x="10" org_y="12" org_z="4"
+			classname="lookinfo" looktext="$PGM looktext poolroom"/>
+		<entity org_x="10" org_y="-2" org_z="4"
+			classname="lookinfo" looktext="$PGM looktext closet1f"/>
+		<entity org_x="10" org_y="-14" org_z="4"
+			classname="lookinfo" looktext="$PGM looktext bath1f"/>
+		<entity org_x="10" org_y="-28" org_z="4"
+			classname="lookinfo" looktext="$PGM looktext parlor"/>
+
+		<entity org_x="-10" org_y="28" org_z="4"
+			classname="lookinfo" looktext="$PGM looktext kitchen"/>
+		<entity org_x="-10" org_y="12" org_z="4"
+			classname="lookinfo" looktext="$PGM looktext dining"/>
+		<entity org_x="-10" org_y="-2" org_z="4"
+			classname="lookinfo" looktext="$PGM looktext bar"/>
+		<entity org_x="-10" org_y="-14" org_z="4"
+			classname="lookinfo" looktext="$PGM looktext stairs"/>
+		<entity org_x="-10" org_y="-28" org_z="4"
+			classname="lookinfo" looktext="$PGM looktext mudroom"/>
+
+		<entity org_x="0" org_y="36" org_z="4"
+			classname="lookinfo" looktext="$PGM looktext sunroom"/>
+
+		<entity org_x="0" org_y="26" org_z="4"
+			classname="lookinfo" looktext="$PGM looktext hall1f"/>
+		<entity org_x="0" org_y="18" org_z="4"
+			classname="lookinfo" looktext="$PGM looktext hall1f"/>
+		<entity org_x="0" org_y="-10" org_z="4"
+			classname="lookinfo" looktext="$PGM looktext hall1f"/>
+		<entity org_x="0" org_y="-30" org_z="4"
+			classname="lookinfo" looktext="$PGM looktext hall1f"/>
+
+
+		<entity org_x="10" org_y="28" org_z="10"
+			classname="lookinfo" looktext="$PGM looktext master_bedroom"/>
+
+		<entity org_x="5" org_y="16" org_z="10"
+			classname="lookinfo" looktext="$PGM looktext master_bath"/>
+		<entity org_x="15" org_y="16" org_z="10"
+			classname="lookinfo" looktext="$PGM looktext master_closet1"/>
+		<entity org_x="15" org_y="8" org_z="10"
+			classname="lookinfo" looktext="$PGM looktext master_closet2"/>
+
+		<entity org_x="10" org_y="-2" org_z="10"
+			classname="lookinfo" looktext="$PGM looktext guest3"/>
+		<entity org_x="10" org_y="-14" org_z="10"
+			classname="lookinfo" looktext="$PGM looktext closet2f"/>
+		<entity org_x="10" org_y="-28" org_z="10"
+			classname="lookinfo" looktext="$PGM looktext bath2f"/>
+
+		<entity org_x="-10" org_y="28" org_z="10"
+			classname="lookinfo" looktext="$PGM looktext guest1"/>
+		<entity org_x="-10" org_y="12" org_z="10"
+			classname="lookinfo" looktext="$PGM looktext guest2"/>
+		<entity org_x="-10" org_y="-2" org_z="10"
+			classname="lookinfo" looktext="$PGM looktext servant"/>
+		<entity org_x="-10" org_y="-14" org_z="10"
+			classname="lookinfo" looktext="$PGM looktext stairs"/>
+		<entity org_x="-10" org_y="-28" org_z="10"
+			classname="lookinfo" looktext="$PGM looktext guest4"/>
+
+		<entity org_x="0" org_y="26" org_z="10"
+			classname="lookinfo" looktext="$PGM looktext hall2f"/>
+		<entity org_x="0" org_y="18" org_z="10"
+			classname="lookinfo" looktext="$PGM looktext hall2f"/>
+		<entity org_x="0" org_y="-10" org_z="10"
+			classname="lookinfo" looktext="$PGM looktext hall2f"/>
+		<entity org_x="0" org_y="-30" org_z="10"
+			classname="lookinfo" looktext="$PGM looktext hall2f"/>
+		<entity org_x="0" org_y="-38" org_z="10"
+			classname="lookinfo" looktext="$PGM looktext balcony2f"/>
+		
+		<entity org_x="0" org_y="-40" org_z="4"
+			classname="lookinfo" looktext="$PGM looktext front1f"/>
+
+		<entity org_x="0" org_y="36" org_z="1"
+			classname="prop" modelname="couch0"/>
+
+		<entity org_x="-3" org_y="34" org_z="1" yaw="45"
+			classname="prop" modelname="couch0"/>
+
+		<entity org_x="3" org_y="34" org_z="1" yaw="-45"
+			classname="prop" modelname="couch0"/>
+
 	</object>
 
 </structure>

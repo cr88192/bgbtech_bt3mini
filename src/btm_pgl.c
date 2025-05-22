@@ -3,7 +3,8 @@
 #ifdef _WIN32
 
 #define PGL_NATIVEGL
-#define BTM_RAYTHREAD
+// #define BTM_RAYTHREAD
+// #define PGL_FLIPVIEW
 
 #endif
 

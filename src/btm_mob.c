@@ -40,6 +40,8 @@ int BTM_UnlockSprites()
 BTM_MobSprite *BTM_AllocSprite()
 {
 	BTM_MobSprite *tmp;
+	int i, n;
+	
 	tmp=btm_freesprites;
 	if(tmp)
 	{
@@ -47,7 +49,18 @@ BTM_MobSprite *BTM_AllocSprite()
 		return(tmp);
 	}
 	
-	tmp=btm_malloc(sizeof(BTM_MobSprite));
+	n=16384/sizeof(BTM_MobSprite);
+	tmp=btm_malloc(n*sizeof(BTM_MobSprite));
+
+	for(i=0; i<n; i++)
+	{
+		tmp->next=btm_freesprites;
+		btm_freesprites=tmp;
+		tmp++;
+	}
+
+	tmp=BTM_AllocSprite();
+//	tmp=btm_malloc(sizeof(BTM_MobSprite));
 	return(tmp);
 }
 
@@ -107,6 +120,9 @@ int BTMGL_DrawSprite(BTM_World *wrl,
 	{	if(cy>cxhqtr)
 			cy-=cxfull;		}
 #endif
+
+	if(!mob->spr_base)
+		return(0);
 
 //	ll=BTM_GetLightForXYZ(wrl, cx>>8, cy>>8, cz>>8);
 //	rgb=BTM_GetColorRgbForBlockLight(ll);
@@ -263,11 +279,19 @@ int BTMGL_DrawEntityBasic(BTM_World *wrl,
 	int ll;
 	u32 rgb;
 
+	if(!mob->spr_base)
+		return(0);
+
 	spr=BTM_AllocSprite();
 	
 	cx=mob->org_x;
 	cy=mob->org_y;
 	cz=mob->org_z;
+	
+	if(!strcmp(mob->cname, "prop"))
+	{
+		ll=-1;
+	}
 	
 	spr->org_x=cx;
 	spr->org_y=cy;
@@ -396,10 +420,54 @@ int BTMGL_LoadModelForName(char *base, int seq, int frm)
 //	return(BTMGL_LoadTextureForName(tb));
 }
 
+char *btmgl_seq2anim[]={"walk", "run", "stand", NULL};
+int btmgl_seq2anim_hash_mdlseq[64];
+int btmgl_seq2anim_hash_anim[64];
+
 int BTMGL_DrawModelIndex(int mdlid, int seq, int frm)
 {
-	BTM_BmdDrawModel(btmgl_models[mdlid], seq, frm);
+	int mdsq, h, aid;
+
+	mdsq=((mdlid<<8)|seq)^0x5555;
+	h=(mdsq^(mdsq>>5)^(mdsq>>11))&63;
+	if(btmgl_seq2anim_hash_mdlseq[h]==mdsq)
+	{
+		aid=btmgl_seq2anim_hash_anim[h];
+	}else
+	{
+		aid=BTM_BmdGetAnimIndexForName(
+			btmgl_models[mdlid],
+			btmgl_seq2anim[seq]);
+		btmgl_seq2anim_hash_mdlseq[h]=mdsq;
+		btmgl_seq2anim_hash_anim[h]=aid;
+	}
+
+	BTM_BmdDrawModel(btmgl_models[mdlid], aid, frm);
 	return(0);
+}
+
+int BTMGL_CheckModelIndexNonSolid(int mdlid)
+{
+	return(btmgl_models[mdlid]->n_bone>1);
+}
+
+int BTMGL_CheckPointModelIndex(int mdlid, float *xyz)
+{
+	int fl;
+	fl=BTM_BmdCheckPointModel(btmgl_models[mdlid], xyz);
+	return(fl);
+}
+
+int BTMGL_CheckLineModelIndex(int mdlid, float *spos, float *epos)
+{
+	int fl;
+	fl=BTM_BmdCheckLineModelBasic(btmgl_models[mdlid], spos, epos);
+	return(fl);
+}
+
+int BTMGL_GetModelAnimForName(int mdlid, char *name)
+{
+	return(BTM_BmdGetAnimIndexForName(btmgl_models[mdlid], name));
 }
 
 bccx_cxstate	bccx_mobj;
@@ -407,18 +475,40 @@ bccx_cxstate	bccx_mobj;
 BTM_MobEntity *BTM_AllocWorldMob(BTM_World *wrl)
 {
 	BTM_MobEntity *tmp;
+	int i, n;
 	
 	tmp=wrl->free_mobent;
 	if(tmp)
 	{
-		wrl->free_mobent=tmp;
+		wrl->free_mobent=tmp->next;
 		memset(tmp, 0, sizeof(BTM_MobEntity));
 		return(tmp);
 	}
+
+	n=16384/sizeof(BTM_MobEntity);
+	if(n<1)		n=1;
+	tmp=btm_malloc(n*sizeof(BTM_MobEntity));
+	memset(tmp, 0, n*sizeof(BTM_MobEntity));
 	
-	tmp=malloc(sizeof(BTM_MobEntity));
-	memset(tmp, 0, sizeof(BTM_MobEntity));
+	for(i=0; i<n; i++)
+	{
+		tmp->next=wrl->free_mobent;
+		wrl->free_mobent=tmp;
+		tmp++;
+	}
+	
+	tmp=BTM_AllocWorldMob(wrl);
+//	tmp=btm_malloc(sizeof(BTM_MobEntity));
+//	memset(tmp, 0, sizeof(BTM_MobEntity));
 	return(tmp);
+}
+
+int BTM_FreeWorldMob(BTM_World *wrl, BTM_MobEntity *mob)
+{
+	memset(mob, 0, sizeof(BTM_MobEntity));
+	mob->next=wrl->free_mobent;
+	wrl->free_mobent=mob;
+	return(0);
 }
 
 int BTM_RunTickMobNone(BTM_World *wrl, BTM_MobEntity *self)
@@ -428,10 +518,12 @@ int BTM_RunTickMobNone(BTM_World *wrl, BTM_MobEntity *self)
 
 int BTM_RunMobTickMove(BTM_World *wrl, BTM_MobEntity *self)
 {
-	float org[3], vel[3], ivel[3];
+	float org[3], org1[3], vel[3], vel1[3], ivel[3];
+	BTM_MobEntity	*mv_ose;
 	float dtf, frc;
 	float f0, f1, f2;
-	int mvflag;
+	int mvflag, rt;
+	int i, j, k, sc;
 	
 	dtf=0.1;
 
@@ -521,13 +613,76 @@ int BTM_RunMobTickMove(BTM_World *wrl, BTM_MobEntity *self)
 		}
 	}
 
-	BTM_CheckWorldMoveVelSz(wrl, dtf,
+	mv_ose=wrl->move_selfent;
+	wrl->move_selfent=self;
+	rt=BTM_CheckWorldMoveVelSz(wrl, dtf,
 		org, vel,
 		self->rad_x*(1.0/16),
 		self->rad_z*(1.0/16),
 		self->rad_ofs_z*(1.0/16),
 		org, vel, &mvflag);
+	wrl->move_selfent=mv_ose;
 	
+	if((rt&3)==3)
+	{
+		/* try to unstick */
+		for(i=0; i<8*8; i++)
+		{
+			org1[0]=org[0];
+			org1[1]=org[1];
+			org1[2]=org[2];
+			sc=1;
+			if(i&32)
+				sc=2;
+			switch(i&7)
+			{
+				case 0: org1[0]-=sc; 	break;
+				case 1: org1[0]+=sc;	break;
+				case 2: org1[1]-=sc; 	break;
+				case 3: org1[1]+=sc;	break;
+				case 4: org1[0]-=sc; org1[1]-=sc; break;
+				case 5: org1[0]+=sc; org1[1]-=sc; break;
+				case 6: org1[0]-=sc; org1[1]+=sc; break;
+				case 7: org1[0]+=sc; org1[1]+=sc; break;
+			}
+			if((i&0x18)==0x08)
+				 org1[1]+=sc;
+			if((i&0x18)==0x10)
+				 org1[1]-=sc;
+
+			TKRA_Vec3F_Zero(vel1);
+
+			k=0;
+			rt=BTM_CheckWorldMoveVelSz(wrl, dtf,
+				org1, vel1,
+				self->rad_x*(1.0/16),
+				self->rad_z*(1.0/16),
+				self->rad_ofs_z*(1.0/16),
+				org1, vel1, &k);
+			if((rt&3)!=3)
+				break;
+		}
+
+		if((rt&3)!=3)
+		{
+			self->org_x=org1[0]*256;
+			self->org_y=org1[1]*256;
+			self->org_z=org1[2]*256;
+
+			self->vel_x=vel1[0]*256;
+			self->vel_y=vel1[1]*256;
+			self->vel_z=vel1[2]*256;
+
+			self->mvflag=mvflag;
+
+//			self->orgl_x=self->org_x;
+//			self->orgl_y=self->org_y;
+//			self->orgl_z=self->org_z;
+
+			return(0);
+		}
+	}
+
 	self->org_x=org[0]*256;
 	self->org_y=org[1]*256;
 	self->org_z=org[2]*256;
@@ -620,8 +775,10 @@ u64 BTM_MobGetOriginBlockPos(BTM_World *wrl, BTM_MobEntity *self)
 int BTM_CheckMobCanMoveSpot(BTM_World *wrl, BTM_MobEntity *self, u64 spot)
 {
 	float tv_bbox[6], tv_org[6];
+	BTM_MobEntity	*mv_ose;
 	u64 cpos;
 	u32 blk0, blk1, blk2, blk3, blkc0, blkc1;
+	int r;
 	
 	cpos=BTM_MobGetOriginPos(wrl, self);
 
@@ -670,7 +827,12 @@ int BTM_CheckMobCanMoveSpot(BTM_World *wrl, BTM_MobEntity *self, u64 spot)
 	tv_bbox[1]=-tv_bbox[3];
 	tv_bbox[2]=0;
 
-	if(BTM_CheckWorldMoveSpot(wrl, tv_org+0, tv_bbox, tv_org+3)&1)
+	mv_ose=wrl->move_selfent;
+	wrl->move_selfent=self;
+	r=BTM_CheckWorldMoveSpot(wrl, tv_org+0, tv_bbox, tv_org+3);
+	wrl->move_selfent=mv_ose;
+
+	if(r&1)
 	{
 		return(0);
 	}
@@ -714,11 +876,17 @@ int BTM_RunTickMobBasic(BTM_World *wrl, BTM_MobEntity *self)
 {
 	u64 cpos, mvpos;
 	char *snd;
-	int mvfl, nomove;
+	int mvfl, nomove, d;
 
 	nomove=0;
 	if(!strcmp(self->cname, "npc"))
 		nomove=1;
+
+	cpos=BTM_MobGetOriginPos(wrl, self);
+	d=BTM_CameraDistanceToCPos(wrl, cpos);
+
+	if(d>=(btm_drawdist>>1))
+		return(0);
 
 	BTM_RunMobTickMove(wrl, self);
 
@@ -910,6 +1078,14 @@ int BTM_GetMobCollideImpulse(
 				ent=ent->next;
 				continue;
 			}
+			
+//			if((ent->cname[0]=='p') &&
+//				!strcmp(ent->cname, "prop"))
+			if(ent->solidtype!=BTM_SOLIDTYPE_MOB)
+			{
+				ent=ent->next;
+				continue;
+			}
 
 			ix=rx-dx;
 			iz=rz-dz;
@@ -948,6 +1124,9 @@ int BTM_RunSpawnerForEntity(BTM_World *wrl,
 	mob->Draw=BTMGL_DrawEntityBasic;
 	mob->spr_dxs=1;
 	mob->spr_dzs=1;
+
+	mob->movetype=BTM_MOVETYPE_SLIDE;
+	mob->solidtype=BTM_SOLIDTYPE_MOB;
 
 	if(!strcmp(mob->cname, "chicken"))
 	{
@@ -1030,6 +1209,15 @@ int BTM_RunSpawnerForEntity(BTM_World *wrl,
 		mob->rad_x=0.375*16;
 		mob->rad_z=2.0*16;
 
+		mob->movetype=BTM_MOVETYPE_NONE;
+		mob->solidtype=BTM_SOLIDTYPE_MODEL;
+
+	}
+
+	if(!strcmp(mob->cname, "lookinfo"))
+	{
+		mob->movetype=BTM_MOVETYPE_NONE;
+		mob->solidtype=BTM_SOLIDTYPE_NONE;
 	}
 
 	return(0);
@@ -1255,7 +1443,7 @@ int BTM_SpawnRegionEntity(BTM_World *wrl,
 		mob->org_y=org[1]*256;
 		mob->org_z=org[2]*256;
 		mob->yaw=yaw;
-		mob->yaw=pitch;
+		mob->pitch=pitch;
 		
 		mob->orgl_x=mob->org_x;
 		mob->orgl_y=mob->org_y;
@@ -1928,7 +2116,8 @@ int BTM_CalcRayRelativeApproach(u64 svel, u64 evel)
 #endif
 
 BTM_MobEntity *BTM_QueryWorldEntitiesAtPos(
-	BTM_World *wrl, BTM_MobEntity *slst, u64 spos)
+	BTM_World *wrl, BTM_MobEntity *slst, u64 spos,
+	BTM_MobEntity *ignore)
 {
 	u64 abpos[8];
 	BTM_Region *rgn;
@@ -2050,16 +2239,97 @@ int BTM_RemoveWorldEntitiesInBox(
 			{
 				if(	!strcmp(mob->cname, classname) ||
 					!strcmp(classname, "*"))
+				{
+					if(mob->rgn!=rgn)
+						{ __debugbreak(); }
 					BTM_UnlinkMobFromWorld(wrl, mob);
+					BTM_FreeWorldMob(wrl, mob);
+					rgn->dirty|=32;
+				}
 			}
 			mob=mnxt;
 		}
+
+#if 1
+		mob=rgn->live_entity;
+		while(mob)
+		{
+			mnxt=mob->next;
+			if(mob->bpos==bpos)
+			{
+				if(	!strcmp(mob->cname, classname) ||
+					!strcmp(classname, "*"))
+				{
+					if(mob->rgn!=rgn)
+						{ __debugbreak(); }
+					BTM_UnlinkMobFromWorld(wrl, mob);
+					BTM_FreeWorldMob(wrl, mob);
+					rgn->dirty|=32;
+				}
+			}
+			mob=mnxt;
+		}
+
+#endif
 	}
 	return(0);
 }
 
+BTM_MobEntity *BTM_QueryWorldEntitiesForBox(
+	BTM_World *wrl, BTM_MobEntity *slst,
+	int mcx, int mcy, int mcz, int ncx, int ncy, int ncz,
+	BTM_MobEntity *ignore)
+{
+	BTM_Region *rgn;
+	BTM_MobEntity *mob, *mlst, *mnxt;
+	u64 blk, clpos, rcix, rcix2, rlcix, bpos;
+	int rix, cix, h, lrix;
+	int cx, cy, cz;
+	
+	if((mcx&0xFFFF)>(ncx&0xFFFF))
+		return(slst);
+	if((mcy&0xFFFF)>(ncy&0xFFFF))
+		return(slst);
+	
+	lrix=-999; rgn=NULL;
+	mlst=slst;
+	for(cz=mcz; cz<=ncz; cz++)
+		for(cy=mcy; cy<=ncy; cy++)
+			for(cx=mcx; cx<=ncx; cx++)
+	{
+		rcix=BTM_BlockCoordsToRcix(cx, cy, cz);
+		rix=BTM_Rcix2Rix(rcix);
+		if(rix!=lrix)
+		{
+			rgn=BTM_GetRegionForRix(wrl, rix);
+			lrix=rix;
+		}
+
+		bpos=BTM_ConvRcixToBlkPos(rcix);
+		h=BTM_HashForBlkPos(bpos);
+		mob=rgn->live_entity_hash[h];
+		while(mob)
+		{
+			mnxt=mob->nxt_bpos;
+			if(mob==ignore)
+				{ mob=mnxt; continue; }
+			if(mob->bpos==bpos)
+			{
+				if(!mob->chn_bpos)
+				{
+					mob->chn_bpos=mlst;
+					mlst=mob;
+				}
+			}
+			mob=mnxt;
+		}
+	}
+	return(mlst);
+}
+
 BTM_MobEntity *BTM_QueryWorldEntitiesForRay(
-	BTM_World *wrl, u64 spos, u64 epos)
+	BTM_World *wrl, u64 spos, u64 epos,
+	BTM_MobEntity *ignore)
 {
 	BTM_Region *rgn;
 	BTM_MobEntity *mob, *mlst;
@@ -2076,7 +2346,7 @@ BTM_MobEntity *BTM_QueryWorldEntitiesForRay(
 	cpos=spos; n=((dist+255)>>8)+2;
 	while((n--)>0)
 	{
-		mlst=BTM_QueryWorldEntitiesAtPos(wrl, mlst, cpos);
+		mlst=BTM_QueryWorldEntitiesAtPos(wrl, mlst, cpos, ignore);
 		cpos+=step;
 	}
 	return(mlst);
@@ -2106,7 +2376,8 @@ int BTM_QueryUnlinkMobChains(
 }
 
 BTM_MobEntity *BTM_QueryWorldEntityForRay(
-	BTM_World *wrl, u64 spos, u64 epos)
+	BTM_World *wrl, u64 spos, u64 epos,
+	BTM_MobEntity *ignore)
 {
 	BTM_Region *rgn;
 	BTM_MobEntity *mob, *mlst;
@@ -2123,7 +2394,7 @@ BTM_MobEntity *BTM_QueryWorldEntityForRay(
 	cpos=spos; n=((dist+255)>>8)+2;
 	while((n--)>0)
 	{
-		mlst=BTM_QueryWorldEntitiesAtPos(wrl, mlst, cpos);
+		mlst=BTM_QueryWorldEntitiesAtPos(wrl, mlst, cpos, ignore);
 		if(mlst)
 			break;
 		cpos+=step;
@@ -2132,6 +2403,140 @@ BTM_MobEntity *BTM_QueryWorldEntityForRay(
 	BTM_QueryUnlinkMobChains(wrl, mlst);
 	return(mlst);
 }
+
+int BTM_CheckBoxCollideMob(
+	BTM_World *wrl, BTM_MobEntity *mob,
+	float *org, float *bbox)
+{
+	float tvert[8*3];
+	float tvm[3], tvn[3], tv0[3], tv1[3];
+	float m_vx[3], m_vy[3], m_vz[3];
+	float morg[3];
+	float m_yaw;
+	int cx, cy, cz;
+	int mdl, rt, cfl;
+	int i, j, k;
+	
+	if(!mob->spr_base)
+		return(0);
+		
+	if(mob->solidtype!=BTM_SOLIDTYPE_MODEL)
+		return(0);
+
+	mdl=BTMGL_LoadModelForName(mob->spr_base, mob->spr_seq, mob->spr_frame);
+
+	if(mdl<0)
+		return(0);
+	
+	if(BTMGL_CheckModelIndexNonSolid(mdl))
+		return(0);
+	
+	if((mob->cname[0]=='p') && !strcmp(mob->cname, "prop"))
+	{
+		rt=-1;
+	}
+	
+	m_yaw=(mob->yaw+128)*(M_PI/128);
+	m_vx[0]= cos(m_yaw);	m_vx[1]= sin(m_yaw);	m_vx[2]=0;
+	m_vy[0]=-sin(m_yaw);	m_vy[1]= cos(m_yaw);	m_vy[2]=0;
+	m_vz[0]=0;				m_vz[1]=0;				m_vz[2]=1;
+
+	morg[0]=mob->org_x*(1.0/256);
+	morg[1]=mob->org_y*(1.0/256);
+	morg[2]=mob->org_z*(1.0/256);
+	
+	tvm[0]=(org[0]-morg[0])+bbox[0];
+	tvm[1]=(org[1]-morg[1])+bbox[1];
+	tvm[2]=(org[2]-morg[2])+bbox[2];
+	tvn[0]=(org[0]-morg[0])+bbox[3];
+	tvn[1]=(org[1]-morg[1])+bbox[4];
+	tvn[2]=(org[2]-morg[2])+bbox[5];
+	
+	TKRA_Vec3F_Scale(m_vx, 40, m_vx);
+	TKRA_Vec3F_Scale(m_vy, 40, m_vy);
+	TKRA_Vec3F_Scale(m_vz, 40, m_vz);
+	
+	cfl=0;
+
+	for(i=0; i<8; i++)
+	{
+		tv0[0]=(i&1)?tvn[0]:tvm[0];
+		tv0[1]=(i&2)?tvn[1]:tvm[1];
+		tv0[2]=(i&4)?tvn[2]:tvm[2];
+
+		tv1[0]=TKRA_Vec3F_DotProduct(tv0, m_vx);
+		tv1[1]=TKRA_Vec3F_DotProduct(tv0, m_vy);
+		tv1[2]=TKRA_Vec3F_DotProduct(tv0, m_vz);
+
+		tvert[i*3+0]=tv1[0];
+		tvert[i*3+1]=tv1[1];
+		tvert[i*3+2]=tv1[2];
+	}
+	
+	rt=BTMGL_CheckLineModelIndex(mdl, tvert+0*3, tvert+1*3);
+	rt+=BTMGL_CheckLineModelIndex(mdl, tvert+2*3, tvert+3*3);
+	rt+=BTMGL_CheckLineModelIndex(mdl, tvert+0*3, tvert+2*3);
+	rt+=BTMGL_CheckLineModelIndex(mdl, tvert+1*3, tvert+3*3);
+	if(rt>0)	cfl|=1;
+	if(cfl)
+		return(cfl);
+
+	rt=BTMGL_CheckLineModelIndex(mdl, tvert+4*3, tvert+5*3);
+	rt+=BTMGL_CheckLineModelIndex(mdl, tvert+6*3, tvert+7*3);
+	rt+=BTMGL_CheckLineModelIndex(mdl, tvert+4*3, tvert+6*3);
+	rt+=BTMGL_CheckLineModelIndex(mdl, tvert+5*3, tvert+7*3);
+	if(rt>0)	cfl|=1;
+	if(cfl)
+		return(cfl);
+
+	rt=BTMGL_CheckLineModelIndex(mdl, tvert+0*3, tvert+4*3);
+	rt+=BTMGL_CheckLineModelIndex(mdl, tvert+1*3, tvert+5*3);
+	rt+=BTMGL_CheckLineModelIndex(mdl, tvert+2*3, tvert+6*3);
+	rt+=BTMGL_CheckLineModelIndex(mdl, tvert+3*3, tvert+7*3);
+	if(rt>0)	cfl|=1;
+	if(cfl)
+		return(cfl);
+
+	rt=BTMGL_CheckLineModelIndex(mdl, tvert+0*3, tvert+5*3);
+	rt+=BTMGL_CheckLineModelIndex(mdl, tvert+2*3, tvert+7*3);
+	rt+=BTMGL_CheckLineModelIndex(mdl, tvert+0*3, tvert+6*3);
+	rt+=BTMGL_CheckLineModelIndex(mdl, tvert+1*3, tvert+7*3);
+	if(rt>0)	cfl|=1;
+	if(cfl)
+		return(cfl);
+
+	rt=BTMGL_CheckLineModelIndex(mdl, tvert+1*3, tvert+4*3);
+	rt+=BTMGL_CheckLineModelIndex(mdl, tvert+3*3, tvert+6*3);
+	rt+=BTMGL_CheckLineModelIndex(mdl, tvert+2*3, tvert+4*3);
+	rt+=BTMGL_CheckLineModelIndex(mdl, tvert+3*3, tvert+5*3);
+	if(rt>0)	cfl|=1;
+	if(cfl)
+		return(cfl);
+
+
+#if 0
+	for(cz=1; cz<8; cz++)
+		for(cy=0; cy<4; cy++)
+			for(cx=0; cx<4; cx++)
+	{
+		tv0[0]=tvm[0]+cx*(tvn[0]-tvm[0])*0.3;
+		tv0[1]=tvm[1]+cy*(tvn[1]-tvm[1])*0.3;
+		tv0[2]=tvm[2]+cz*(tvn[2]-tvm[2])*0.143;
+		
+		tv1[0]=TKRA_Vec3F_DotProduct(tv0, m_vx);
+		tv1[1]=TKRA_Vec3F_DotProduct(tv0, m_vy);
+		tv1[2]=TKRA_Vec3F_DotProduct(tv0, m_vz);
+		
+		rt=BTMGL_CheckPointModelIndex(mdl, tv1);
+		if(rt>0)	cfl|=1;
+		if(cfl)
+			return(cfl);
+	}
+#endif
+
+	return(0);
+}
+
 
 int BTM_EventPlayerUseMob(
 	BTM_World *wrl, BTM_MobEntity *mob)

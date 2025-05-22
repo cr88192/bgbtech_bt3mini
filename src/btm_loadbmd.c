@@ -1,3 +1,45 @@
+u32 BTM_BmdScaleRgbFp(u32 src, float f);
+u32 BTM_BmdScaleRgbFp3(u32 src, float fr, float fg, float fb);
+
+
+void *btm_alloc_bmdslab(BTM_BtModel *mdl, int sz)
+{
+	byte *ptr;
+	int i, j;
+
+	if(sz>=512)
+	{
+		ptr=btm_malloc(sz);
+		memset(ptr, 0, sz);
+		return(ptr);
+	}
+	
+	if(mdl->nslab<1)
+	{
+		mdl->slab[0]=btm_malloc(8192);
+		mdl->nslab++;
+	}
+	
+	i=mdl->nslab-1;
+	j=mdl->slabpos;
+
+	if((j+sz)>=8192)
+	{
+		i=mdl->nslab++;
+		mdl->slab[i]=btm_malloc(8192);
+		mdl->slabpos=0;
+		j=0;
+	}
+	
+	ptr=mdl->slab[i]+j;
+	j=j+((sz+7)&(~7));
+	mdl->slabpos=j;
+
+	memset(ptr, 0, sz);
+	
+	return(ptr);
+}
+
 float BTM_BmdLoad_DecodeF16A(u16 val)
 {
 	float f;
@@ -387,7 +429,10 @@ int BTM_BmdLoad_DecodeTriQuad(byte *buf, int tsz,
 	return(2);
 }
 
-int BTM_BmdLoad_DecodeAnimFrames(BTM_BtModelAnim *anim, byte *buf)
+int BTM_BmdLoad_DecodeAnimFrames(
+	BTM_BtModel *mdl,
+	BTM_BtModelAnim *anim,
+	byte *buf)
 {
 	u32 *refrot, *reforg, *refscl;
 	byte *cs;
@@ -399,19 +444,28 @@ int BTM_BmdLoad_DecodeAnimFrames(BTM_BtModelAnim *anim, byte *buf)
 	mbn=anim->n_bones;
 	mfr=anim->n_frames;
 
-	anim->frm_rot=btm_malloc(mfr*mbn*sizeof(u32));
-	anim->frm_org=btm_malloc(mfr*mbn*sizeof(u32));
-	anim->frm_scl=btm_malloc(mfr*mbn*sizeof(u32));
+//	anim->frm_rot=btm_malloc(mfr*mbn*sizeof(u32));
+//	anim->frm_org=btm_malloc(mfr*mbn*sizeof(u32));
+//	anim->frm_scl=btm_malloc(mfr*mbn*sizeof(u32));
+
+	anim->frm_rot=btm_alloc_bmdslab(mdl, mfr*mbn*sizeof(u32));
+	anim->frm_org=btm_alloc_bmdslab(mdl, mfr*mbn*sizeof(u32));
+	anim->frm_scl=btm_alloc_bmdslab(mdl, mfr*mbn*sizeof(u32));
+
 	memset(anim->frm_rot, 0xFF, mfr*mbn*sizeof(u32));
 	memset(anim->frm_org, 0xFF, mfr*mbn*sizeof(u32));
 	memset(anim->frm_scl, 0xFF, mfr*mbn*sizeof(u32));
 
-	refrot=btm_malloc(mfr*mbn*sizeof(u32));
-	reforg=btm_malloc(mfr*mbn*sizeof(u32));
-	refscl=btm_malloc(mfr*mbn*sizeof(u32));
-	memcpy(refrot, anim->frm_rot, mfr*mbn*sizeof(u32));
-	memcpy(reforg, anim->frm_org, mfr*mbn*sizeof(u32));
-	memcpy(refscl, anim->frm_scl, mfr*mbn*sizeof(u32));
+	refrot=anim->frm_rot;
+	reforg=anim->frm_org;
+	refscl=anim->frm_scl;
+
+//	refrot=btm_malloc(mfr*mbn*sizeof(u32));
+//	reforg=btm_malloc(mfr*mbn*sizeof(u32));
+//	refscl=btm_malloc(mfr*mbn*sizeof(u32));
+//	memcpy(refrot, anim->frm_rot, mfr*mbn*sizeof(u32));
+//	memcpy(reforg, anim->frm_org, mfr*mbn*sizeof(u32));
+//	memcpy(refscl, anim->frm_scl, mfr*mbn*sizeof(u32));
 
 	dflscl=(15<<27)|(128<<0)|(128<<9)|(128<<18);
 
@@ -440,19 +494,19 @@ int BTM_BmdLoad_DecodeAnimFrames(BTM_BtModelAnim *anim, byte *buf)
 				break;
 			if(tg&0x80)
 			{
-				memcpy(anim->frm_rot+fr*mbn+bn, cs, 4);
+//				memcpy(anim->frm_rot+fr*mbn+bn, cs, 4);
 				memcpy(refrot+fr*mbn+bn, cs, 4);
 				cs+=4;
 			}
 			if(tg&0x40)
 			{
-				memcpy(anim->frm_org+fr*mbn+bn, cs, 4);
+//				memcpy(anim->frm_org+fr*mbn+bn, cs, 4);
 				memcpy(reforg+fr*mbn+bn, cs, 4);
 				cs+=4;
 			}
 			if(tg&0x20)
 			{
-				memcpy(anim->frm_scl+fr*mbn+bn, cs, 4);
+//				memcpy(anim->frm_scl+fr*mbn+bn, cs, 4);
 				memcpy(refscl+fr*mbn+bn, cs, 4);
 				cs+=4;
 			}
@@ -585,15 +639,18 @@ int BTM_BmdLoad_DecodeAnimFrames(BTM_BtModelAnim *anim, byte *buf)
 BTM_BtModel *BTM_BmdLoadModelBuffer(byte *buf, int sz)
 {
 	char tb[256];
+	float dv0[3], dv1[3], dv2[4], dv3[4];
 	char *s0, *s1;
 	BTM_BtModel *mdl;
+	float *xyz;
 	int meshofs, meshsz, lodofs, lodsz, nlod;
 	int vtxofs, vtxsz, trisofs, trissz, matofs;
 	int boneofs, bonesz, animofs, animsz;
 	int nmesh, nvtx, ntri, szvtx, sztri;
 	int nbone, nanim, mabone;
 	u32 prot, porg;
-	float f, g;
+	int i0, i1, i2;
+	float f, g, fr, fg, fb;
 	int i, j, k;
 	
 	meshofs	=*(u32 *)(buf+0x10);
@@ -613,6 +670,7 @@ BTM_BtModel *BTM_BmdLoadModelBuffer(byte *buf, int sz)
 	nanim=animsz>>4;
 
 	mdl=btm_malloc(sizeof(BTM_BtModel));
+	memset(mdl, 0, sizeof(BTM_BtModel));
 	
 	mdl->n_lod=nlod;
 	mdl->n_mesh=nmesh;
@@ -642,7 +700,8 @@ BTM_BtModel *BTM_BmdLoadModelBuffer(byte *buf, int sz)
 
 	for(i=0; i<nmesh; i++)
 	{
-		mdl->mesh[i]=btm_malloc(sizeof(BTM_BtModelMesh));
+//		mdl->mesh[i]=btm_malloc(sizeof(BTM_BtModelMesh));
+		mdl->mesh[i]=btm_alloc_bmdslab(mdl, sizeof(BTM_BtModelMesh));
 		vtxofs	=*(u32 *)(buf+(meshofs+i*32+0x00));
 		trisofs	=*(u32 *)(buf+(meshofs+i*32+0x04));
 		matofs	=*(u32 *)(buf+(meshofs+i*32+0x08));
@@ -676,14 +735,36 @@ BTM_BtModel *BTM_BmdLoadModelBuffer(byte *buf, int sz)
 				}
 		}
 
-		mdl->mesh[i]->v_xy=btm_malloc(nvtx*3*sizeof(float));
-		mdl->mesh[i]->v_st=btm_malloc(nvtx*2*sizeof(float));
-		mdl->mesh[i]->v_nv=btm_malloc(nvtx*3*sizeof(float));
-		mdl->mesh[i]->v_cl=btm_malloc(nvtx*1*sizeof(u32));
-		mdl->mesh[i]->v_bn=btm_malloc(nvtx*1*sizeof(byte));
-		mdl->mesh[i]->tris=btm_malloc(nvtx*4*sizeof(u16));
+//		mdl->mesh[i]->v_xy=btm_malloc(nvtx*3*sizeof(float));
+//		mdl->mesh[i]->v_st=btm_malloc(nvtx*2*sizeof(float));
+//		mdl->mesh[i]->v_nv=btm_malloc(nvtx*3*sizeof(float));
+//		mdl->mesh[i]->v_cl=btm_malloc(nvtx*1*sizeof(u32));
+//		mdl->mesh[i]->v_bn=btm_malloc(nvtx*1*sizeof(byte));
+//		mdl->mesh[i]->tris=btm_malloc(nvtx*4*sizeof(u16));
+
+		mdl->mesh[i]->v_xy=btm_alloc_bmdslab(mdl, nvtx*3*sizeof(float));
+		mdl->mesh[i]->v_st=btm_alloc_bmdslab(mdl, nvtx*2*sizeof(float));
+		mdl->mesh[i]->v_nv=btm_alloc_bmdslab(mdl, nvtx*3*sizeof(float));
+		mdl->mesh[i]->v_cl=btm_alloc_bmdslab(mdl, nvtx*1*sizeof(u32));
+		mdl->mesh[i]->v_bn=btm_alloc_bmdslab(mdl, nvtx*1*sizeof(byte));
+		mdl->mesh[i]->tris=btm_alloc_bmdslab(mdl, nvtx*4*sizeof(u16));
+
+		if(nbone<=1)
+		{
+			mdl->mesh[i]->tri_nv=btm_alloc_bmdslab(mdl, nvtx*4*sizeof(float));
+		}
+
 		mdl->mesh[i]->n_vtx=nvtx;
 		mdl->mesh[i]->n_tri=ntri;
+		
+		mdl->mesh[i]->bbox[0]= 999999;
+		mdl->mesh[i]->bbox[1]= 999999;
+		mdl->mesh[i]->bbox[2]= 999999;
+		mdl->mesh[i]->bbox[3]=-999999;
+		mdl->mesh[i]->bbox[4]=-999999;
+		mdl->mesh[i]->bbox[5]=-999999;
+		
+		xyz=mdl->mesh[i]->v_xy;
 		
 		k=0;
 		for(j=0; j<nvtx; j++)
@@ -696,6 +777,19 @@ BTM_BtModel *BTM_BmdLoadModelBuffer(byte *buf, int sz)
 				mdl->mesh[i]->v_nv+j*3,
 				mdl->mesh[i]->v_cl+j*1,
 				mdl->mesh[i]->v_bn+j*1);
+
+			if(mdl->mesh[i]->v_xy[j*3+0]<mdl->mesh[i]->bbox[0])
+				mdl->mesh[i]->bbox[0]=mdl->mesh[i]->v_xy[j*3+0];
+			if(mdl->mesh[i]->v_xy[j*3+1]<mdl->mesh[i]->bbox[1])
+				mdl->mesh[i]->bbox[1]=mdl->mesh[i]->v_xy[j*3+1];
+			if(mdl->mesh[i]->v_xy[j*3+2]<mdl->mesh[i]->bbox[2])
+				mdl->mesh[i]->bbox[2]=mdl->mesh[i]->v_xy[j*3+2];
+			if(mdl->mesh[i]->v_xy[j*3+0]>mdl->mesh[i]->bbox[3])
+				mdl->mesh[i]->bbox[3]=mdl->mesh[i]->v_xy[j*3+0];
+			if(mdl->mesh[i]->v_xy[j*3+1]>mdl->mesh[i]->bbox[4])
+				mdl->mesh[i]->bbox[4]=mdl->mesh[i]->v_xy[j*3+1];
+			if(mdl->mesh[i]->v_xy[j*3+2]>mdl->mesh[i]->bbox[5])
+				mdl->mesh[i]->bbox[5]=mdl->mesh[i]->v_xy[j*3+2];
 		}
 		
 //		mdl->mesh[i]->v_bn[j-1]=mdl->mesh[i]->v_bn[j-2];
@@ -706,19 +800,52 @@ BTM_BtModel *BTM_BmdLoadModelBuffer(byte *buf, int sz)
 			k+=BTM_BmdLoad_DecodeTriQuad(
 				buf+trisofs+k*4, sztri,
 				mdl->mesh[i]->tris+j*4);
+				
+			if(mdl->mesh[i]->tri_nv)
+			{
+				i0=mdl->mesh[i]->tris[j*4+0];
+				i1=mdl->mesh[i]->tris[j*4+1];
+				i2=mdl->mesh[i]->tris[j*4+2];
+				TKRA_Vec3F_Sub(xyz+i1*3, xyz+i0*3, dv0);
+				TKRA_Vec3F_Sub(xyz+i2*3, xyz+i1*3, dv1);
+				TKRA_Vec3F_CrossProduct(dv0, dv1, dv2);
+				TKRA_Vec3F_Normalize(dv2, dv3);
+				dv3[3]=TKRA_Vec3F_DotProduct(xyz+i0*3, dv3);
+				TKRA_Vec4F_Copy(dv3, mdl->mesh[i]->tri_nv+j*4);
+			}
 		}
 	}
 	
 	if(!boneofs)
 	{
 		/* No bones, so done. */
+
+#if 1
+		for(i=0; i<nmesh; i++)
+		{
+			/* though, adjust RGB's based on normal. */
+			mdl->mesh[i]->n_vtx;
+			for(j=0; j<nvtx; j++)
+			{
+				f=0.8+mdl->mesh[i]->v_nv[j*3+2]*0.4;
+				fr=f+mdl->mesh[i]->v_nv[j*3+0]*0.05;
+				fb=f+mdl->mesh[i]->v_nv[j*3+1]*0.05;
+				fg=(fr+fb)/2;
+				mdl->mesh[i]->v_cl[j]=
+					BTM_BmdScaleRgbFp3(mdl->mesh[i]->v_cl[j],
+						fr, fg, fb);
+			}
+		}
+#endif
+
 		return(mdl);
 	}
 
 	mabone=0;
 	for(i=0; i<nbone; i++)
 	{
-		mdl->bone[i]=btm_malloc(sizeof(BTM_BtModelBone));
+//		mdl->bone[i]=btm_malloc(sizeof(BTM_BtModelBone));
+		mdl->bone[i]=btm_alloc_bmdslab(mdl, sizeof(BTM_BtModelBone));
 		
 		porg	=*(u32 *)(buf+(boneofs+i*16+0x00));
 		prot	=*(u32 *)(buf+(boneofs+i*16+0x04));
@@ -744,7 +871,8 @@ BTM_BtModel *BTM_BmdLoadModelBuffer(byte *buf, int sz)
 
 	for(i=0; i<nanim; i++)
 	{
-		mdl->anim[i]=btm_malloc(sizeof(BTM_BtModelAnim));
+//		mdl->anim[i]=btm_malloc(sizeof(BTM_BtModelAnim));
+		mdl->anim[i]=btm_alloc_bmdslab(mdl, sizeof(BTM_BtModelAnim));
 
 		matofs	=*(u32 *)(buf+(animofs+i*16+0x00));
 		vtxofs	=*(u32 *)(buf+(animofs+i*16+0x08));
@@ -757,7 +885,7 @@ BTM_BtModel *BTM_BmdLoadModelBuffer(byte *buf, int sz)
 
 		mdl->anim[i]->n_frames=nvtx;
 		mdl->anim[i]->n_bones=mabone;
-		BTM_BmdLoad_DecodeAnimFrames(mdl->anim[i], buf+vtxofs);
+		BTM_BmdLoad_DecodeAnimFrames(mdl, mdl->anim[i], buf+vtxofs);
 	}
 
 	return(mdl);
@@ -1008,6 +1136,34 @@ byte BTM_BmdScaleByteFp(byte src, float f)
 	return(i);
 }
 
+u32 BTM_BmdScaleRgbFp(u32 src, float f)
+{
+	u32 v1;
+	int cr, cg, cb;
+	cr=(src>>16)&255;
+	cg=(src>> 8)&255;
+	cb=(src>> 0)&255;
+	cr=BTM_BmdScaleByteFp(cr, f);
+	cg=BTM_BmdScaleByteFp(cg, f);
+	cb=BTM_BmdScaleByteFp(cb, f);
+	v1=(src&0xFF000000U)|(cr<<16)|(cg<<8)|(cb<<0);
+	return(v1);
+}
+
+u32 BTM_BmdScaleRgbFp3(u32 src, float fr, float fg, float fb)
+{
+	u32 v1;
+	int cr, cg, cb;
+	cr=(src>>16)&255;
+	cg=(src>> 8)&255;
+	cb=(src>> 0)&255;
+	cr=BTM_BmdScaleByteFp(cr, fr);
+	cg=BTM_BmdScaleByteFp(cg, fg);
+	cb=BTM_BmdScaleByteFp(cb, fb);
+	v1=(src&0xFF000000U)|(cr<<16)|(cg<<8)|(cb<<0);
+	return(v1);
+}
+
 int BTM_BmdGetModelCacheVertexTransIdx(BTM_BtModel *mdl,
 	int midx, int seq, int frm)
 {
@@ -1017,10 +1173,15 @@ int BTM_BmdGetModelCacheVertexTransIdx(BTM_BtModel *mdl,
 	float *trans, *xyz, *nv;
 	byte *cl, *mcl;
 	float f;
-	int h, sqfr, mdlbits, nvtx;
+	int h, fr, nfr, sqfr, mdlbits, nvtx;
 	int i, j, k;
 
-	sqfr=(midx<<16)|(seq<<8)|frm;
+	nfr=mdl->anim[seq]->n_frames;
+	fr=frm;
+	while(fr>=nfr)
+		fr-=nfr;
+
+	sqfr=(midx<<16)|(seq<<8)|fr;
 	mdlbits=((long long)mdl);
 	
 	h=1;
@@ -1045,8 +1206,8 @@ int BTM_BmdGetModelCacheVertexTransIdx(BTM_BtModel *mdl,
 		(nvtx>btm_bmdmeshcache_nvtx[h]))
 	{
 		btm_free(btm_bmdmeshcache_xyz[h]);
-		btm_free(btm_bmdmeshcache_nv[h]);
-		btm_free(btm_bmdmeshcache_cl[h]);
+//		btm_free(btm_bmdmeshcache_nv[h]);
+//		btm_free(btm_bmdmeshcache_cl[h]);
 	
 		btm_bmdmeshcache_xyz[h]=NULL;
 		btm_bmdmeshcache_nv[h]=NULL;
@@ -1055,20 +1216,26 @@ int BTM_BmdGetModelCacheVertexTransIdx(BTM_BtModel *mdl,
 	
 	if(!btm_bmdmeshcache_xyz[h])
 	{
-		k=128;
+//		k=128;
+		k=64;
 		while(nvtx>k)
 			k=k+(k>>1);
 
-		btm_bmdmeshcache_xyz[h]=btm_malloc(k*3*sizeof(float));
-		btm_bmdmeshcache_nv[h]=btm_malloc(k*3*sizeof(float));
-		btm_bmdmeshcache_cl[h]=btm_malloc(k*4*sizeof(byte));
+		xyz=btm_malloc(k*7*sizeof(float));
+		btm_bmdmeshcache_xyz[h]=xyz;
+		btm_bmdmeshcache_nv[h]=xyz+(k*3);
+		btm_bmdmeshcache_cl[h]=(byte *)(xyz+(k*3)+(k*3));
+
+//		btm_bmdmeshcache_xyz[h]=btm_malloc(k*3*sizeof(float));
+//		btm_bmdmeshcache_nv[h]=btm_malloc(k*3*sizeof(float));
+//		btm_bmdmeshcache_cl[h]=btm_malloc(k*4*sizeof(byte));
 		btm_bmdmeshcache_nvtx[h]=k;
 	}
 	
 	btm_bmdmeshcache_mdl[h]=mdl;
 	btm_bmdmeshcache_sqfr[h]=sqfr;
 		
-	trans=BTM_BmdGetModelCachedSkelTrans(mdl, seq, frm);
+	trans=BTM_BmdGetModelCachedSkelTrans(mdl, seq, fr);
 	
 	xyz=btm_bmdmeshcache_xyz[h];
 	nv=btm_bmdmeshcache_nv[h];
@@ -1177,6 +1344,18 @@ int BTM_BmdDrawModel(BTM_BtModel *mdl, int seq, int frm)
 	
 	BTM_BmdDrawModelSkel(mdl, seq, frm);
 	return(0);
+}
+
+int BTM_BmdGetAnimIndexForName(BTM_BtModel *mdl, char *name)
+{
+	int i;
+
+	for(i=0; i<mdl->n_anim; i++)
+	{
+		if(!strcmp(mdl->anim[i]->name, name))
+			return(i);
+	}
+	return(-1);
 }
 
 int BTM_ConvFloatToLB8S(float f)
@@ -1328,3 +1507,205 @@ int BTM_BmdDrawInit()
 
 	return(1);
 }
+
+int BTM_BmdCheckLineCrossFace(BTM_BtModelMesh *mesh, int fn,
+	float *spos, float *epos)
+{
+	float tv0[3], dv0[4], dv1[4], dv2[4], dv3[4];
+	float ev0[4], ev1[4], ev2[4], ev3[4];
+	float *xyz0, *xyz1, *xyz2, *xyz3, *xnv;
+	float z0, z1, z2, z3;
+	int i0, i1, i2, i3;
+	
+	if(!mesh->tri_nv)
+		return(0);
+	
+	xnv=mesh->tri_nv+fn*4;
+	
+	z0=TKRA_Vec3F_DotProduct(spos, xnv)-xnv[3];
+	z1=TKRA_Vec3F_DotProduct(epos, xnv)-xnv[3];
+	
+	if((z0>=0) && (z1>=0))
+		return(0);
+	if((z0<=0) && (z1<=0))
+		return(0);
+		
+	i0=mesh->tris[fn*4+0];
+	i1=mesh->tris[fn*4+1];
+	i2=mesh->tris[fn*4+2];
+	i3=mesh->tris[fn*4+3];
+
+	xyz0=mesh->v_xy+i0*3;
+	xyz1=mesh->v_xy+i1*3;
+	xyz2=mesh->v_xy+i2*3;
+	xyz3=mesh->v_xy+i3*3;
+
+	Hull_LinePlaneIntersect(spos, epos, xnv, tv0);
+	
+	TKRA_Vec3F_Sub(xyz1, xyz0, dv0);
+	TKRA_Vec3F_Sub(xyz2, xyz1, dv1);
+	TKRA_Vec3F_CrossProduct(dv0, xnv, ev0);
+	TKRA_Vec3F_CrossProduct(dv1, xnv, ev1);
+	TKRA_Vec3F_Normalize(ev0, ev0);
+	TKRA_Vec3F_Normalize(ev1, ev1);
+	ev0[3]=TKRA_Vec3F_DotProduct(xyz0, ev0);
+	ev1[3]=TKRA_Vec3F_DotProduct(xyz1, ev1);
+
+	if(i2!=i3)
+	{
+		TKRA_Vec3F_Sub(xyz3, xyz2, dv2);
+		TKRA_Vec3F_Sub(xyz0, xyz3, dv3);
+		TKRA_Vec3F_CrossProduct(dv2, xnv, ev2);
+		TKRA_Vec3F_CrossProduct(dv3, xnv, ev3);
+		TKRA_Vec3F_Normalize(ev2, ev2);
+		TKRA_Vec3F_Normalize(ev3, ev3);
+		ev2[3]=TKRA_Vec3F_DotProduct(xyz2, ev2);
+		ev3[3]=TKRA_Vec3F_DotProduct(xyz3, ev3);
+	}else
+	{
+		TKRA_Vec3F_Sub(xyz0, xyz2, dv2);
+		TKRA_Vec3F_CrossProduct(dv2, xnv, ev2);
+		TKRA_Vec3F_Normalize(ev2, ev2);
+		ev2[3]=TKRA_Vec3F_DotProduct(xyz2, ev2);
+		TKRA_Vec4F_Copy(ev2, ev3);
+	}
+	
+	z0=TKRA_Vec3F_NDotProduct(tv0, ev0);
+	z1=TKRA_Vec3F_NDotProduct(tv0, ev1);
+	z2=TKRA_Vec3F_NDotProduct(tv0, ev2);
+	z3=TKRA_Vec3F_NDotProduct(tv0, ev3);
+	if(z0>=0)	return(0);
+	if(z1>=0)	return(0);
+	if(z2>=0)	return(0);
+	if(z3>=0)	return(0);
+
+	return(1);
+}
+
+int BTM_BmdCheckLineModelBasic(BTM_BtModel *mdl, float *spos, float *epos)
+{
+	BTM_BtModelMesh *mesh;
+	int mb, mn, mi, ti, nc;
+	int i, j, k;
+	
+	if(mdl->n_bone>1)
+		return(0);
+	
+	mb=mdl->lod_base[0];
+	mn=mb+mdl->lod_cnt[0];
+	nc=0;
+	
+	for(mi=mb; mi<mn; mi++)
+	{
+		mesh=mdl->mesh[mi];
+
+		if(	(spos[0]<=mesh->bbox[0]) &&
+			(epos[0]<=mesh->bbox[0]) )
+				continue;
+		if(	(spos[1]<=mesh->bbox[1]) &&
+			(epos[1]<=mesh->bbox[1]) )
+				continue;
+		if(	(spos[2]<=mesh->bbox[2]) &&
+			(epos[2]<=mesh->bbox[2]) )
+				continue;
+		if(	(spos[0]>=mesh->bbox[3]) &&
+			(epos[0]>=mesh->bbox[3]) )
+				continue;
+		if(	(spos[1]>=mesh->bbox[4]) &&
+			(epos[1]>=mesh->bbox[4]) )
+				continue;
+		if(	(spos[2]>=mesh->bbox[5]) &&
+			(epos[2]>=mesh->bbox[5]) )
+				continue;
+
+		for(ti=0; ti<mesh->n_tri; ti++)
+		{
+			k=BTM_BmdCheckLineCrossFace(mesh, ti, spos, epos);
+			if(k>0)
+				nc++;
+		}
+	}
+	
+	return(nc);
+}
+
+
+int BTM_BmdCheckPointModelBasic(BTM_BtModel *mdl, float *xyz)
+{
+	float tve[3];
+	BTM_BtModelMesh *mesh;
+	int mb, mn, mi, ti, nc;
+	int i, j, k;
+	
+	if(mdl->n_bone>1)
+		return(0);
+	
+	mb=mdl->lod_base[0];
+	mn=mb+mdl->lod_cnt[0];
+	
+	TKRA_Vec3F_Scale(xyz, 5000, tve);
+	
+	for(mi=mb; mi<mn; mi++)
+	{
+		mesh=mdl->mesh[mi];
+
+		if(xyz[0]<=mesh->bbox[0])	continue;
+		if(xyz[1]<=mesh->bbox[1])	continue;
+		if(xyz[2]<=mesh->bbox[2])	continue;
+		if(xyz[0]>=mesh->bbox[3])	continue;
+		if(xyz[1]>=mesh->bbox[4])	continue;
+		if(xyz[2]>=mesh->bbox[5])	continue;
+
+		nc=0;
+		for(ti=0; ti<mesh->n_tri; ti++)
+		{
+			k=BTM_BmdCheckLineCrossFace(mesh, ti, xyz, tve);
+			if(k>0)
+				nc++;
+		}
+		
+		if(nc&1)
+		{
+			return(1);
+		}
+
+#if 0	
+		ti=BTM_BmdGetTexture(mesh->matname);
+		if(ti>0)
+		{
+			pglEnable(GL_TEXTURE_2D);
+			pglBindTexture(GL_TEXTURE_2D, ti);
+		}else
+		{
+			pglDisable(GL_TEXTURE_2D);
+		}
+
+		pglEnableClientState(GL_VERTEX_ARRAY);
+		pglEnableClientState(GL_TEXTURE_COORD_ARRAY);
+//		pglEnableClientState(GL_NORMAL_ARRAY);
+		pglEnableClientState(GL_COLOR_ARRAY);
+
+		pglVertexPointer(3, TKRA_GL_FLOAT, 3*4, mesh->v_xy);
+		pglTexCoordPointer(2, TKRA_GL_FLOAT, 2*4, mesh->v_st);
+		pglNormalPointer(TKRA_GL_FLOAT, 3*4, mesh->v_nv);
+		pglColorPointer(4, TKRA_GL_UNSIGNED_BYTE, 4, mesh->v_cl);
+		pglDrawElements(TKRA_GL_QUADS, mesh->n_tri*4,
+			TKRA_GL_UNSIGNED_SHORT, mesh->tris);
+
+		pglDisableClientState(GL_VERTEX_ARRAY);
+		pglDisableClientState(GL_TEXTURE_COORD_ARRAY);
+//		pglDisableClientState(GL_NORMAL_ARRAY);
+		pglDisableClientState(GL_COLOR_ARRAY);
+
+		pglEnable(GL_TEXTURE_2D);
+#endif
+	}
+	
+	return(0);
+}
+
+int BTM_BmdCheckPointModel(BTM_BtModel *mdl, float *xyz)
+{
+	return(BTM_BmdCheckPointModelBasic(mdl, xyz));
+}
+

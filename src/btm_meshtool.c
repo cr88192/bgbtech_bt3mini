@@ -560,21 +560,25 @@ int main(int argc, char *argv[])
 //			if(btm_noclip)
 			if(1)
 			{
-				if(I_KeyDown(K_HOME))
+				if(I_KeyDown(K_HOME) ||
+						I_KeyDown(K_NUMPAD7))
 					cam_org[2]+=dt*(12/1000.0);
-				if(I_KeyDown(K_END))
+				if(I_KeyDown(K_END) ||
+						I_KeyDown(K_NUMPAD1))
 					cam_org[2]-=dt*(12/1000.0);
 
 				if(I_KeyDown(K_UPARROW) ||
 						I_KeyDown('w') ||
-						I_KeyDown('W'))
+						I_KeyDown('W') ||
+						I_KeyDown(K_NUMPAD8))
 				{
 					cam_org[0]+=dt*(12/1000.0)*sin(cam_ang_yaw*(M_PI/180));
 					cam_org[1]-=dt*(12/1000.0)*cos(cam_ang_yaw*(M_PI/180));
 				}
 				if(I_KeyDown(K_DOWNARROW) ||
 						I_KeyDown('s') ||
-						I_KeyDown('S'))
+						I_KeyDown('S') ||
+						I_KeyDown(K_NUMPAD2))
 				{
 					cam_org[0]-=dt*(12/1000.0)*sin(cam_ang_yaw*(M_PI/180));
 					cam_org[1]+=dt*(12/1000.0)*cos(cam_ang_yaw*(M_PI/180));
@@ -584,7 +588,8 @@ int main(int argc, char *argv[])
 				{
 					if(I_KeyDown(K_LEFTARROW) ||
 						I_KeyDown('a') ||
-						I_KeyDown('A'))
+						I_KeyDown('A') ||
+						I_KeyDown(K_NUMPAD4))
 					{
 						cam_org[0]-=dt*(12/1000.0)*
 							cos(cam_ang_yaw*(M_PI/180));
@@ -593,7 +598,8 @@ int main(int argc, char *argv[])
 					}
 					if(I_KeyDown(K_RIGHTARROW) ||
 						I_KeyDown('d') ||
-						I_KeyDown('D'))
+						I_KeyDown('D') ||
+						I_KeyDown(K_NUMPAD6))
 					{
 						cam_org[0]+=dt*(12/1000.0)*
 							cos(cam_ang_yaw*(M_PI/180));

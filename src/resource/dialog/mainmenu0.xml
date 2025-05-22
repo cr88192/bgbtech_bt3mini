@@ -18,6 +18,14 @@
 		<option text="Dialog Test 1" gosubname="dialog1"/>
 	</menu>
 
+	<menu name="youdead" title="You Dead"
+			playsound="sound/chop3.wav">
+		<option text="New Game"/>
+		<option text="Options" gosubname="options"/>
+		<option text="Load"/>
+		<option text="Exit"/>
+	</menu>
+
 	<convo name="dialog1">
 		<text>
 			Line 1
@@ -39,11 +47,37 @@
 	<convo name="use_pig.squeal" face="pigface">
 		<text>
 			Speaking gently to its ear.
+		</text>
+		<option text="Continue"
+			gosubname="use_pig.squeal.false"
+			excl_inven="pb_junk"/>
+		<option text="Continue"
+			gosubname="use_pig.squeal.true"
+			need_inven="pb_junk"/>
+	</convo>
+
+	<convo name="use_pig.squeal.false" face="pigface">
+		<text>
 			Despite burns of desire,
 			your request falls flat.
 			Not today...
 		</text>
 		<option text="Leave" goname=""/>
+	</convo>
+
+
+	<convo name="use_pig.squeal.true" face="pigface">
+		<text>
+			It senses your desire,
+			and the smell of
+			  peanut butter.
+			It starts with a
+			  nibble...
+			Then goes hog wild.
+			Soon enough, there is
+			  nothing left.
+		</text>
+		<option text="Continue" gosubname="youdead"/>
 	</convo>
 
 	<convo name="use_cow" face="cowface">

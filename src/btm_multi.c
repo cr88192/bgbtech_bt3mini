@@ -75,6 +75,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "btm_wad4.c"
 
+#include "src_mesh/btm_csg_clip.c"
+
 #include "btm_loadmod.c"
 #include "btm_sndmix.c"
 #include "btm_loadbmd.c"

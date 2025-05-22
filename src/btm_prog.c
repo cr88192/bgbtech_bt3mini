@@ -227,6 +227,7 @@ int BTM_PgmInternToken(char *str)
 int BTM_PgmFlushPrograms()
 {
 	btm_conpgms=NULL;
+	return(0);
 }
 
 BTM_ConPgm *BTM_PgmLookupProgram(char *name)
@@ -290,7 +291,7 @@ BTM_ConPgm *BTM_PgmLoadParse(char *name, char *sbuf, int szbuf)
 	u16 *tokb, *toki, *lblid, *lblix;
 	BTM_ConPgm *cmd;
 	char **a;
-	char *cs, *ct;
+	char *cs, *ct, *cse;
 	int mtokb, ntokb;
 	int mtoki, ntoki;
 	int mlbl, nlbl;
@@ -314,12 +315,13 @@ BTM_ConPgm *BTM_PgmLoadParse(char *name, char *sbuf, int szbuf)
 	nlbl=0;
 
 	cs=sbuf;
-	while(*cs)
+	cse=sbuf+szbuf;
+	while((cs<cse) && *cs)
 	{
-		while(*cs && *cs<=' ')
+		while((cs<cse) && *cs && *cs<=' ')
 			cs++;
 		ct=tbuf;
-		while((*cs!='\r') && (*cs!='\n'))
+		while((cs<cse) && (*cs!='\r') && (*cs!='\n'))
 		{
 			if((*cs=='\\') && ((cs[1]=='\r') || (cs[1]=='\n')))
 			{

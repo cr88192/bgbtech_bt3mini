@@ -302,6 +302,32 @@ The origin will be given in absolute world coordinates.
 * The Z coordinate will be constrained to 0 to 128.
 
 
+=== Region Outer Shell (Possible) ===
+
+This would be a more minimalistic form of a region, may be used to display regions that are further away but still drawn; or to map out blocks where accuracy is not important and we would preferably avoid loading chunks into RAM.
+
+In this case, rather than the region having 512 chunks, it will instead have 5 or 6 faces, each representing a block type and a distance from the respective face (to the first non-transparent block).
+
+Likely, each face will be 128x128 pixels, possibly with a 9 bit block type and 7 bit distance.
+
+ Header {
+ u64 magic1;		//00, "BTMROS01"
+ u32 imageSize;		//08, Size of ROS
+ u32 resv1;			//0C
+ u32 ofsFace[6];	//10, offset of face image.
+ u32 ofsIndex;		//28, offset of block index.
+ }
+
+Offsets will be encoded:
+* (19: 0): Offset, in 16-byte cells.
+* (31:20): Size (in 16 byte cells).
+
+The face images will use a 16-bit RLE compression scheme.
+* 0000..EFFF: Raw Value
+* F000 xxxx: Escaped Value (Value XOR'ed with 0x8000)
+* F001..FFFF: RLE Run Last value repeats 1 to 4095 times.
+
+
 === Network Protocol (Possible) ===
 
 Will probably use ABXE.

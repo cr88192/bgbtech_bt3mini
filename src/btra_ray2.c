@@ -29,6 +29,8 @@ u64 BTM_WorldCorgToRcix(u64 cpos);
 u32 BTM_GetWorldBlockCorg(BTM_World *wrl, u64 corg);
 u64 BTM_ConvRcixToBlkPos(u64 rcix);
 
+u32 BTM_WeakGetWorldBlockCix(BTM_World *wrl, u64 rcix);
+
 u64 BTM_RaycastDeltaVector(u64 spos, u64 epos);
 u64 BTM_CalcRayStepVector(u64 spos, u64 epos);
 
@@ -45,6 +47,7 @@ BTM_Region *BTM_GetRegionForRix(BTM_World *wrl, int rix);
 BTM_Region *BTM_LookupRegionForRix(BTM_World *wrl, int rix);
 
 u32 BTM_GetRegionBlockCix(BTM_World *wrl, BTM_Region *rgn, int cix);
+u32 BTM_WeakGetRegionBlockCix(BTM_World *wrl, BTM_Region *rgn, int cix);
 int BTM_SetRegionBlockCix(BTM_World *wrl,
 	BTM_Region *rgn, int cix, u32 blk);
 
@@ -111,6 +114,31 @@ u64 btm_raycast_avgvec(u64 vec0, u64 vec1)
 	return(vec2);
 }
 
+int BTM_RaycastTryMarkHitCix(BTM_World *wrl, u64 rcix, int nrcnt)
+{
+	BTM_Region *rgn;
+	u64 blk;
+	int rix, cix, bt, fm, ch;
+
+	rix=BTM_Rcix2Rix(rcix);
+	cix=BTM_Rcix2Cix(rcix);
+
+	rgn=BTM_GetRegionForRix(wrl, rix);
+
+	blk=BTM_WeakGetRegionBlockCix(wrl, rgn, cix);
+	bt=blk&0xFF;
+	fm=(blk>>24)&63;
+	if(bt<4)
+		return(0);
+	if(fm==63)
+		return(0);
+	
+	ch=(cix>>12)&511;
+	rgn->chkhit[ch]=nrcnt;
+
+	return(0);
+}
+
 int BTM_RaycastTryAddHitCix1(BTM_World *wrl, u64 rcix, int nrcnt)
 {
 	BTM_Region *rgn;
@@ -119,7 +147,7 @@ int BTM_RaycastTryAddHitCix1(BTM_World *wrl, u64 rcix, int nrcnt)
 	int *chn;
 	int *hash;
 	byte *rcnt;
-	int msk, bt, fm, rix, cix;
+	int msk, bt, fm, rix, cix, nr1, ch;
 
 	int i, j, k, n, h;
 
@@ -129,7 +157,8 @@ int BTM_RaycastTryAddHitCix1(BTM_World *wrl, u64 rcix, int nrcnt)
 	rgn=BTM_GetRegionForRix(wrl, rix);
 
 //	blk=rgn->vox[cix];
-	blk=BTM_GetRegionBlockCix(wrl, rgn, cix);
+//	blk=BTM_GetRegionBlockCix(wrl, rgn, cix);
+	blk=BTM_WeakGetRegionBlockCix(wrl, rgn, cix);
 	bt=blk&0xFF;
 	fm=(blk>>24)&63;
 //	if(bt<2)
@@ -137,6 +166,16 @@ int BTM_RaycastTryAddHitCix1(BTM_World *wrl, u64 rcix, int nrcnt)
 		return(0);
 	if(fm==63)
 		return(0);
+	
+	ch=(cix>>12)&511;
+	rgn->chkhit[ch]=nrcnt;
+	
+//	if((blk>>30)&1)
+	if((blk>>30)&3)
+	{
+		/* limit direct-drawing to exclude weak hits */
+		return(0);
+	}
 
 //	h=((rcix*(251*65521))>>24)&63;
 	h=((rcix*(251*65521))>>24)&(BTM_RAYCAST_HASHSZ-1);
@@ -158,7 +197,11 @@ int BTM_RaycastTryAddHitCix1(BTM_World *wrl, u64 rcix, int nrcnt)
 	{
 		if(lst[i]==rcix)
 		{
+			nr1=rcnt[i];
 			rcnt[i]=nrcnt;
+//			if(nr1<(nrcnt>>1))
+			if(nr1<((nrcnt*3)>>2))
+				return(2);
 			return(0);
 		}
 		i=chn[i];
@@ -176,9 +219,10 @@ int BTM_RaycastTryAddHitCix1(BTM_World *wrl, u64 rcix, int nrcnt)
 	return(1);
 }
 
-int BTM_RaycastTryAddHitCix(BTM_World *wrl, u64 cix)
+int BTM_RaycastTryAddHitCix(BTM_World *wrl, u64 cix, int dd)
 {
 	u64 cix1, cix2;
+	int cx, cy, cz;
 	int i, to;
 	if(cix==wrl->scr_hpred)
 		return(0);
@@ -192,7 +236,41 @@ int BTM_RaycastTryAddHitCix(BTM_World *wrl, u64 cix)
 	to=127;
 #endif
 
+	if(dd>=wrl->drawnear)
+	{
+		return(BTM_RaycastTryMarkHitCix(wrl, cix, to));
+	}
+
 	i=BTM_RaycastTryAddHitCix1(wrl, cix, to);
+
+#ifdef BTM_HITEXPAMD
+
+	if(!i)
+	{
+#if 0
+		cix1=BTM_BlockOffsetRcix(cix, -BTM_HITEXPAMD, 0, 0);
+		i+=BTM_RaycastTryAddHitCix1(wrl, cix1, to);
+		cix1=BTM_BlockOffsetRcix(cix, BTM_HITEXPAMD, 0, 0);
+		i+=BTM_RaycastTryAddHitCix1(wrl, cix1, to);
+		cix1=BTM_BlockOffsetRcix(cix, 0, -BTM_HITEXPAMD, 0);
+		i+=BTM_RaycastTryAddHitCix1(wrl, cix1, to);
+		cix1=BTM_BlockOffsetRcix(cix, 0, BTM_HITEXPAMD, 0);
+		i+=BTM_RaycastTryAddHitCix1(wrl, cix1, to);
+		if(!i)
+			return(0);
+#endif
+		return(0);
+	}
+
+	for(cz=-BTM_HITEXPAMD; cz<=BTM_HITEXPAMD; cz++)
+		for(cy=-BTM_HITEXPAMD; cy<=BTM_HITEXPAMD; cy++)
+			for(cx=-BTM_HITEXPAMD; cx<=BTM_HITEXPAMD; cx++)
+	{
+		cix1=BTM_BlockOffsetRcix(cix, cx, cy, cz);
+		i+=BTM_RaycastTryAddHitCix1(wrl, cix1, to);
+	}
+
+#else
 
 #if 0
 	i+=BTM_RaycastTryAddHitCix1(wrl, cix+1ULL, to);
@@ -234,6 +312,8 @@ int BTM_RaycastTryAddHitCix(BTM_World *wrl, u64 cix)
 	cix2=BTM_BlockOffsetRcixNz1(cix);
 	i+=BTM_RaycastTryAddHitCix1(wrl, cix1, to);
 	i+=BTM_RaycastTryAddHitCix1(wrl, cix2, to);
+#endif
+
 #endif
 
 	return(i);
@@ -312,7 +392,7 @@ int BTM_RaycastLineSingle(BTM_World *wrl, int max,
 	u32 blk_v, blk_d;
 	int cx, cy, cz, cix, cix2, rx, ry, rix, rgix, rlix;
 	int adx, ady, adz, isqs, isair;
-	int cxm, czm, xsh, zsh;
+	int cxm, czm, xsh, zsh, d;
 	int n, n1;
 	int i, j, k, h;
 
@@ -348,14 +428,15 @@ int BTM_RaycastLineSingle(BTM_World *wrl, int max,
 	blk=voxbmcs[(cix>>6)&63];
 	if((blk>>(cix&63))&1)
 	{
-		blk_v=BTM_GetRegionBlockCix(wrl, rgn, cix);
+//		blk_v=BTM_GetRegionBlockCix(wrl, rgn, cix);
+		blk_v=BTM_WeakGetRegionBlockCix(wrl, rgn, cix);
 		i=blk_v&255;
 		
 		if(!BTM_BlockIsTransparentP(wrl, blk_v))
 		{
 			wrl->scr_lhit=rcix;
 			wrl->scr_lahit=0;
-			i=BTM_RaycastTryAddHitCix(wrl, rcix);
+			i=BTM_RaycastTryAddHitCix(wrl, rcix, btm_drawdist-n);
 			return(i);
 		}
 
@@ -387,14 +468,15 @@ int BTM_RaycastLineSingle(BTM_World *wrl, int max,
 				break;
 			}
 
-			blk_v=BTM_GetRegionBlockCix(wrl, rgn, cix);
+//			blk_v=BTM_GetRegionBlockCix(wrl, rgn, cix);
+			blk_v=BTM_WeakGetRegionBlockCix(wrl, rgn, cix);
 			if(!BTM_BlockIsTransparentP(wrl, blk_v))
 			{
 				/* We have hit something opaque. */
 				break;
 			}
 			
-			BTM_RaycastTryAddHitCix(wrl, rcix);
+			BTM_RaycastTryAddHitCix(wrl, rcix, btm_drawdist-n1);
 
 			rlix=rix;
 			rlcix=rcix;
@@ -469,7 +551,8 @@ int BTM_RaycastLineSingle(BTM_World *wrl, int max,
 			if(!isqs)
 				break;
 
-			blk_v=BTM_GetRegionBlockCix(wrl, rgn, cix);
+//			blk_v=BTM_GetRegionBlockCix(wrl, rgn, cix);
+			blk_v=BTM_WeakGetRegionBlockCix(wrl, rgn, cix);
 			i=blk_v&255;
 			blk_d=btmgl_vox_atlas_side[i];
 			if(blk_d&(BTM_BLKDFL_SEETHRU|BTM_BLKDFL_FLUID))
@@ -492,7 +575,7 @@ int BTM_RaycastLineSingle(BTM_World *wrl, int max,
 		if((blk>>(cix2&63))&1)
 		{
 			rcix2=rcix-(1<<14);
-			BTM_RaycastTryAddHitCix(wrl, rcix2);
+			BTM_RaycastTryAddHitCix(wrl, rcix2, btm_drawdist-n);
 		}
 #endif
 
@@ -513,7 +596,8 @@ int BTM_RaycastLineSingle(BTM_World *wrl, int max,
 	}
 	
 //	blk_v=rgn->vox[cix];
-	blk_v=BTM_GetRegionBlockCix(wrl, rgn, cix);
+//	blk_v=BTM_GetRegionBlockCix(wrl, rgn, cix);
+	blk_v=BTM_WeakGetRegionBlockCix(wrl, rgn, cix);
 	i=blk_v&255;
 	blk_d=btmgl_vox_atlas_side[i];
 	if(i<4)
@@ -521,12 +605,20 @@ int BTM_RaycastLineSingle(BTM_World *wrl, int max,
 
 //	if(blk_d&BTM_BLKDFL_SEETHRU)
 //	if(blk_d&(BTM_BLKDFL_SEETHRU|BTM_BLKDFL_FLUID))
-	if((blk_d&(BTM_BLKDFL_SEETHRU|BTM_BLKDFL_FLUID)) && (n>48))
+//	if((blk_d&(BTM_BLKDFL_SEETHRU|BTM_BLKDFL_FLUID)) && (n>48))
+	if((blk_d&(BTM_BLKDFL_SEETHRU|BTM_BLKDFL_FLUID)) &&
+//		(n>(btm_drawdist-(btm_drawdist>>2))))
+		(n>(btm_drawdist-(wrl->drawnear))))
 //	if((blk_d&(BTM_BLKDFL_SEETHRU|BTM_BLKDFL_FLUID)) && (n>48) &&
 //		!(isair && (blk_d&BTM_BLKDFL_FLUID)))
 //	if((blk_d&(BTM_BLKDFL_SEETHRU|BTM_BLKDFL_FLUID)) && (n>64))
 	{
-		i=BTM_RaycastTryAddHitCix(wrl, rcix);
+		i=BTM_RaycastTryAddHitCix(wrl, rcix, btm_drawdist-n);
+
+//		d=BTM_CameraDistanceToCPos(wrl, cpos);
+//		if(d>=(btm_drawdist>>2))
+//			return(i);
+
 		i+=BTM_RaycastLineSingle(wrl, n-1, cpos+step, step, flag|4);
 		return(i);
 	}
@@ -541,7 +633,7 @@ int BTM_RaycastLineSingle(BTM_World *wrl, int max,
 		wrl->scr_laepos=clpos;
 	}
 
-	i=BTM_RaycastTryAddHitCix(wrl, rcix);
+	i=BTM_RaycastTryAddHitCix(wrl, rcix, btm_drawdist-n);
 	return(i);
 }
 
@@ -675,7 +767,7 @@ int BTM_RaycastLineQuad(BTM_World *wrl, int max, int frmax,
 		return(i);
 	}
 	
-	i=BTM_RaycastTryAddHitCix(wrl, cix0);
+	i=BTM_RaycastTryAddHitCix(wrl, cix0, btm_drawdist-n);
 	return(i);
 }
 #endif
@@ -749,13 +841,15 @@ int BTM_RaycastSceneQuad(BTM_World *wrl)
 	int		x, y, z, yaw, pitch, yji, pji;
 	int		y0_ang, p0_ang;
 	int		y1_ang, p1_ang;
-	int		i, j, k, l, h, n;
+	int		i, j, k, l, h, n, frm, frm5;
 
 	BTM_RaycastInitTables();
 
 	BTMGL_LockWorld();
 
 	BTM_CheckWorldMagic(wrl);
+
+	BTM_TickWorldForRaycast(wrl);
 
 	for(i=0; i<BTM_RAYCAST_HASHSZ; i++)
 	{
@@ -788,13 +882,13 @@ int BTM_RaycastSceneQuad(BTM_World *wrl)
 		if(l>btm_drawdist)
 		{
 			j-=3;
-			if(j<0)
+			if(j<=0)
 				continue;
 		}
 		
 		btm_drawstat_dist[l]++;
 
-		blk=BTM_GetWorldBlockCix(wrl, rcix);
+		blk=BTM_WeakGetWorldBlockCix(wrl, rcix);
 		btm_drawstat_dist_hrsc[l]+=btmgl_vox_hrsc[blk&255];
 		
 		BTM_RaycastTryAddHitCix1(wrl, rcix, j-1);
@@ -829,6 +923,8 @@ int BTM_RaycastSceneQuad(BTM_World *wrl)
 
 	yji=(signed char)(jitter[(wrl->frame>>1)&15]);
 	pji=(signed char)(jitter[(wrl->frame>>3)&15]);
+	frm=wrl->frame;
+	frm5=(frm>>5)^(frm>>2)^(frm>>7);
 
 #ifdef BTM_RAYTHREAD
 
@@ -853,6 +949,13 @@ int BTM_RaycastSceneQuad(BTM_World *wrl)
 			if(x&3)
 				continue;
 		}
+
+#ifdef BTM_HITEXPAMD
+		if((x^frm5)&3)
+			continue;
+		if((y^frm5)&3)
+			continue;
+#endif
 	
 //		y0_ang=x*4+yji;
 		y0_ang=x*8+yji;
@@ -1060,7 +1163,7 @@ u64 BTM_RaycastLineProbeSolid(BTM_World *wrl,
 	voxbm=rgn->voxbm;
 	voxbmix=rgn->voxbmix;
 
-	n=max;
+	n=max>>8;
 	cpos=spos;
 	cstep=step;
 	clpos=cpos;

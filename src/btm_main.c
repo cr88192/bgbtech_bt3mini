@@ -95,8 +95,12 @@ int I_SystemFrame(u16 *fbuf, int xs, int ys)
 
 	for(y=0; y<ys; y++)
 	{
-//		cs=fbuf+(ys-y-1)*xs;
+#ifdef PGL_FLIPVIEW
+		cs=fbuf+(ys-y-1)*xs;
+#else
 		cs=fbuf+y*xs;
+#endif
+
 		ct0=screen+((y*2+0)*btesh2_gfxcon_fbxs);
 		ct1=screen+((y*2+1)*btesh2_gfxcon_fbxs);
 		
@@ -442,6 +446,9 @@ int skybox_tex;
 int skybox_tex_stars;
 int skybox_onetex;
 
+float btm_sky_rgba[4];
+
+
 byte btm_dopause;
 
 int BTMGL_InitSkybox()
@@ -520,10 +527,91 @@ int BTMGL_InitSkybox()
 	return(0);
 }
 
+int BTMGL_DrawSkyboxLower()
+{
+	float strgb[4];
+	pglMatrixMode(TKRA_MODELVIEW);
+	pglPushMatrix();
+
+	pglTranslatef(cam_org[0], cam_org[1], 64-(cam_org[2]-64)*3);
+
+	strgb[0]=btm_sky_rgba[0]*0.5;
+	strgb[1]=btm_sky_rgba[1]*0.5;
+	strgb[2]=btm_sky_rgba[2]*0.5;
+	strgb[3]=1.0;
+
+
+	pglDisable(GL_TEXTURE_2D);
+
+	pglBegin(GL_QUADS);
+
+//	glColor4f(0,0,0,0.5);
+	glColor4fv(strgb);
+	glVertex3f(-510, 510, 0);
+	glColor4f(0,0,0,1.0);
+	glVertex3f(-510, 510, -510);
+	glColor4f(0,0,0,1.0);
+	glVertex3f(510, 510, -510);
+//	glColor4f(0,0,0,0.5);
+	glColor4fv(strgb);
+	glVertex3f(510, 510, 0);
+
+//	glColor4f(0,0,0,0.5);
+	glColor4fv(strgb);
+	glVertex3f(510, -510, 0);
+	glColor4f(0,0,0,1.0);
+	glVertex3f(510, -510, -510);
+	glColor4f(0,0,0,1.0);
+	glVertex3f(-510, -510, -510);
+//	glColor4f(0,0,0,0.5);
+	glColor4fv(strgb);
+	glVertex3f(-510, -510, 0);
+
+//	glColor4f(0,0,0,0.5);
+	glColor4fv(strgb);
+	glVertex3f(510, 510, 0);
+	glColor4f(0,0,0,1.0);
+	glVertex3f(510, 510, -510);
+	glColor4f(0,0,0,1.0);
+	glVertex3f(510, -510, -510);
+//	glColor4f(0,0,0,0.5);
+	glColor4fv(strgb);
+	glVertex3f(510, -510, 0);
+
+
+//	glColor4f(0,0,0,0.5);
+	glColor4fv(strgb);
+	glVertex3f(-510, -510, 0);
+	glColor4f(0,0,0,1.0);
+	glVertex3f(-510, -510, -510);
+	glColor4f(0,0,0,1.0);
+	glVertex3f(-510, 510, -510);
+//	glColor4f(0,0,0,0.5);
+	glColor4fv(strgb);
+	glVertex3f(-510, 510, 0);
+
+
+	glColor4f(0,0,0,1.0);
+	glVertex3f(-510, 510, -510);
+	glVertex3f(-510, -510, -510);
+	glVertex3f(510, -510, -510);
+	glVertex3f(510, 510, -510);
+
+	pglEnd();
+
+	pglEnable(GL_TEXTURE_2D);
+	pglPopMatrix();
+
+	return(0);
+}
+
 int BTMGL_DrawSkybox()
 {
 	if(skybox_tex<=0)
+	{
+		BTMGL_DrawSkyboxLower();
 		return(0);
+	}
 
 	pglMatrixMode(TKRA_MODELVIEW);
 	pglPushMatrix();
@@ -546,6 +634,8 @@ int BTMGL_DrawSkybox()
 //	pglDrawElements(TKRA_GL_TRIANGLES, 6*6, TKRA_GL_INT, cube_tris);
 
 	pglPopMatrix();
+
+	BTMGL_DrawSkyboxLower();
 	return(0);
 }
 
@@ -647,6 +737,11 @@ int BTM_InterpolateDaySky(BTM_World *wrl)
 	cg=((1.0-g)*cga)+(g*cgb);
 	cb=((1.0-g)*cba)+(g*cbb);
 
+	btm_sky_rgba[0]=cr;
+	btm_sky_rgba[1]=cg;
+	btm_sky_rgba[2]=cb;
+	btm_sky_rgba[3]=1.0;
+
 	pglClearColor(cr, cg, cb, 1.0);
 	
 	cy=(cr+2*cg+cb)/4;
@@ -675,6 +770,8 @@ volatile int tt_tick;
 
 volatile int tt_rayframe;
 volatile int tt_drawframe;
+
+volatile int tt_raytime;
 
 // BTM_World *btm_wrl;
 
@@ -804,6 +901,12 @@ int BTM_ConCmd_Eval(BTM_ConCmd *cmd, char **args)
 	return(0);
 }
 
+int BTM_ConCmd_FlushPgm(BTM_ConCmd *cmd, char **args)
+{
+	BTM_PgmFlushPrograms();
+	return(0);
+}
+
 int BTM_ConCmd_ShowMenu(BTM_ConCmd *cmd, char **args)
 {
 	if(args[1])
@@ -818,6 +921,61 @@ int BTM_ConCmd_ShowMenu(BTM_ConCmd *cmd, char **args)
 	}else
 	{
 		BTM_ConPrintf("Usage: showmenu <pgmname> [label]\n");
+	}
+	return(0);
+}
+
+int BTM_ConCmd_GiveItem(BTM_ConCmd *cmd, char **args)
+{
+	int id, cnt;
+	if(args[1])
+	{
+		cnt=1;
+		if(args[2])
+		{
+			cnt=atoi(args[2]);
+		}
+		
+		id=BTM_InvenIdForName(args[1]);
+		
+		if(id>0)
+		{
+			BTM_AddInvenCountForItem(btm_wrl, id, cnt);
+		}
+	}
+	return(0);
+}
+
+int BTM_ConCmd_Use(BTM_ConCmd *cmd, char **args)
+{
+	int id, id2;
+
+	if(args[1])
+	{
+		id=BTM_InvenIdForName(args[1]);
+
+		if(args[2])
+		{
+			if(	!strcmp(args[2], "with") ||
+				!strcmp(args[2], "on"))
+			{
+				if(args[3])
+				{
+					id2=BTM_InvenIdForName(args[3]);
+
+					if((id>0) && (id2>0))
+					{
+						BTM_InvenUseWith(btm_wrl, id, id2);
+					}
+				}
+			}
+		}else
+		{
+			if(id>0)
+			{
+				BTM_InvenUseBasic(btm_wrl, id);
+			}
+		}
 	}
 	return(0);
 }
@@ -1058,18 +1216,20 @@ int BTM_ConCmd_Look(BTM_ConCmd *cmd, char **args)
 		mob=btm_wrl->nearby_mobent;
 		while(mob)
 		{
-			if(!strcmp(mob->cname, "lookinfo") &&
-				BTM_CheckPlayerCanSeeMob(btm_wrl, mob, 128*256))
+			if(!strcmp(mob->cname, "lookinfo"))
 			{
-				if(!mob_lookinfo)
+				if(BTM_CheckPlayerCanSeeMob(btm_wrl, mob, 128*256))
 				{
-					mob_lookinfo=mob;
-				}else
-				{
-					if(	BTM_CalcPlayerMobDistance(btm_wrl, mob) <
-						BTM_CalcPlayerMobDistance(btm_wrl, mob_lookinfo))
+					if(!mob_lookinfo)
 					{
 						mob_lookinfo=mob;
+					}else
+					{
+						if(	BTM_CalcPlayerMobDistance(btm_wrl, mob) <
+							BTM_CalcPlayerMobDistance(btm_wrl, mob_lookinfo))
+						{
+							mob_lookinfo=mob;
+						}
 					}
 				}
 			}
@@ -1279,7 +1439,7 @@ int BTM_RayTick(void *ptr, int dt)
 {
 	static int wrldt;
 	BTM_World *wrl;
-	int t0, t1, tt;
+	int t0, t1, tt, dt1;
 
 	if(btm_dopause)
 		return(0);
@@ -1311,8 +1471,16 @@ int BTM_RayTick(void *ptr, int dt)
 
 		wrldt=0;
 	}
-
+	
 	BTM_PlayerPhysTick(wrl, dt);
+
+	tt_raytime+=dt;
+	if(tt_raytime<100)
+	{
+		return(0);
+	}
+	tt_raytime-=100;
+	dt1=100;
 
 #if 1
 	t0=I_TimeMS();
@@ -1343,7 +1511,7 @@ int BTM_RayTick(void *ptr, int dt)
 
 	t0=I_TimeMS();
 
-	BTM_BlockTickWorld(wrl, dt);
+	BTM_BlockTickWorld(wrl, dt1);
 
 	t1=I_TimeMS();
 	tt_tick+=t1-t0;
@@ -1363,7 +1531,8 @@ int btm_raythreadproc(void *ptr)
 	{
 		tt=I_TimeMS();
 		dt=tt-ltt;
-		if(dt<32)
+//		if(dt<32)
+		if(dt<24)
 			continue;
 		ltt=tt;
 
@@ -1410,13 +1579,16 @@ int main(int argc, char *argv[])
 	BTM_ConAddCommand("instance", BTM_ConCmd_Instance);
 	BTM_ConAddCommand("runpgm", BTM_ConCmd_RunPgm);
 	BTM_ConAddCommand("eval", BTM_ConCmd_Eval);
+	BTM_ConAddCommand("flushpgm", BTM_ConCmd_FlushPgm);
 	BTM_ConAddCommand("showmenu", BTM_ConCmd_ShowMenu);
 	BTM_ConAddCommand("fill", BTM_ConCmd_Fill);
 	BTM_ConAddCommand("relight", BTM_ConCmd_Relight);
+	BTM_ConAddCommand("giveitem", BTM_ConCmd_GiveItem);
 
 	BTM_ConAddCommand("look", BTM_ConCmd_Look);
 	BTM_ConAddCommand("talk", BTM_ConCmd_Talk);
 	BTM_ConAddCommand("ask", BTM_ConCmd_Talk);
+	BTM_ConAddCommand("use", BTM_ConCmd_Use);
 
 	BTM_ConAddCvar("r_drawdist", &btm_drawdist, 0);
 	BTM_ConAddCvar("mlook", &btm_mlook, 0x3F);
@@ -1656,7 +1828,8 @@ int main(int argc, char *argv[])
 		dt=tt-ltt;
 
 //		if(!dt)
-		if(dt<8)
+//		if(dt<8)
+		if(dt<14)
 			{ continue; }
 
 		ltt=tt;
@@ -1823,7 +1996,7 @@ int main(int argc, char *argv[])
 				BTMGL_LockWorld();
 
 				mob=BTM_QueryWorldEntityForRay(wrl,
-					wrl->scr_laspos, wrl->scr_laepos);
+					wrl->scr_laspos, wrl->scr_laepos, NULL);
 				if(mob)
 				{
 					BTM_EventPlayerUseMob(wrl, mob);
@@ -1834,9 +2007,11 @@ int main(int argc, char *argv[])
 
 			if(!I_KeyDown(K_SHIFT) && !btm_mlook)
 			{
-				if(I_KeyDown(K_LEFTARROW))
+				if(I_KeyDown(K_LEFTARROW) ||
+						I_KeyDown('a'))
 					cam_ang_yaw-=dt*(90/1000.0);
-				if(I_KeyDown(K_RIGHTARROW))
+				if(I_KeyDown(K_RIGHTARROW) ||
+						I_KeyDown('d'))
 					cam_ang_yaw+=dt*(90/1000.0);
 			}
 			
@@ -1847,21 +2022,25 @@ int main(int argc, char *argv[])
 
 			if(btm_noclip)
 			{
-				if(I_KeyDown(K_HOME))
+				if(I_KeyDown(K_HOME) ||
+						I_KeyDown(K_NUMPAD7))
 					cam_org[2]+=dt*(12/1000.0);
-				if(I_KeyDown(K_END))
+				if(I_KeyDown(K_END) ||
+						I_KeyDown(K_NUMPAD1))
 					cam_org[2]-=dt*(12/1000.0);
 
 				if(I_KeyDown(K_UPARROW) ||
 						I_KeyDown('w') ||
-						I_KeyDown('W'))
+						I_KeyDown('W') ||
+						I_KeyDown(K_NUMPAD8))
 				{
 					cam_org[0]+=dt*(12/1000.0)*sin(cam_ang_yaw*(M_PI/180));
 					cam_org[1]-=dt*(12/1000.0)*cos(cam_ang_yaw*(M_PI/180));
 				}
 				if(I_KeyDown(K_DOWNARROW) ||
 						I_KeyDown('s') ||
-						I_KeyDown('S'))
+						I_KeyDown('S') ||
+						I_KeyDown(K_NUMPAD2))
 				{
 					cam_org[0]-=dt*(12/1000.0)*sin(cam_ang_yaw*(M_PI/180));
 					cam_org[1]+=dt*(12/1000.0)*cos(cam_ang_yaw*(M_PI/180));
@@ -1871,7 +2050,8 @@ int main(int argc, char *argv[])
 				{
 					if(I_KeyDown(K_LEFTARROW) ||
 						I_KeyDown('a') ||
-						I_KeyDown('A'))
+						I_KeyDown('A') ||
+						I_KeyDown(K_NUMPAD4))
 					{
 						cam_org[0]-=dt*(12/1000.0)*
 							cos(cam_ang_yaw*(M_PI/180));
@@ -1880,7 +2060,24 @@ int main(int argc, char *argv[])
 					}
 					if(I_KeyDown(K_RIGHTARROW) ||
 						I_KeyDown('d') ||
-						I_KeyDown('D'))
+						I_KeyDown('D') ||
+						I_KeyDown(K_NUMPAD6))
+					{
+						cam_org[0]+=dt*(12/1000.0)*
+							cos(cam_ang_yaw*(M_PI/180));
+						cam_org[1]+=dt*(12/1000.0)*
+							sin(cam_ang_yaw*(M_PI/180));
+					}
+				}else
+				{
+					if(I_KeyDown(K_NUMPAD4))
+					{
+						cam_org[0]-=dt*(12/1000.0)*
+							cos(cam_ang_yaw*(M_PI/180));
+						cam_org[1]-=dt*(12/1000.0)*
+							sin(cam_ang_yaw*(M_PI/180));
+					}
+					if(I_KeyDown(K_NUMPAD6))
 					{
 						cam_org[0]+=dt*(12/1000.0)*
 							cos(cam_ang_yaw*(M_PI/180));
@@ -1921,7 +2118,7 @@ int main(int argc, char *argv[])
 					btm_wrl, cam_vel,
 					cam_org, 0.375, 1.8);
 
-				if(I_KeyDown(K_HOME))
+				if(I_KeyDown(K_HOME) || I_KeyDown(K_SPACE))
 				{
 					if(cam_mvflags&1)
 					{
@@ -1933,14 +2130,14 @@ int main(int argc, char *argv[])
 						cam_mvflags&=~1;
 					}else if(cam_mvflags&2)
 					{
-						cam_ivel[2]=12;
+						cam_ivel[2]+=12;
 					}
 	//				else
 	//					cam_ivel[2]=12;
 				}
 				if(I_KeyDown(K_END))
 				{
-					cam_ivel[2]=-12;
+					cam_ivel[2]+=-12;
 				}
 
 				if(I_KeyDown(K_SHIFT))
@@ -1948,28 +2145,28 @@ int main(int argc, char *argv[])
 					if(I_KeyDown(K_UPARROW) ||
 						I_KeyDown('W'))
 					{
-						cam_ivel[0]= 14*sin(cam_ang_yaw*(M_PI/180));
-						cam_ivel[1]=-14*cos(cam_ang_yaw*(M_PI/180));
+						cam_ivel[0]+= 14*sin(cam_ang_yaw*(M_PI/180));
+						cam_ivel[1]+=-14*cos(cam_ang_yaw*(M_PI/180));
 					}
 					if(I_KeyDown(K_DOWNARROW) ||
 						I_KeyDown('S'))
 					{
-						cam_ivel[0]=-14*sin(cam_ang_yaw*(M_PI/180));
-						cam_ivel[1]= 14*cos(cam_ang_yaw*(M_PI/180));
+						cam_ivel[0]+=-14*sin(cam_ang_yaw*(M_PI/180));
+						cam_ivel[1]+= 14*cos(cam_ang_yaw*(M_PI/180));
 					}
 				}else
 				{
 					if(I_KeyDown(K_UPARROW) ||
 						I_KeyDown('w'))
 					{
-						cam_ivel[0]= 7*sin(cam_ang_yaw*(M_PI/180));
-						cam_ivel[1]=-7*cos(cam_ang_yaw*(M_PI/180));
+						cam_ivel[0]+= 7*sin(cam_ang_yaw*(M_PI/180));
+						cam_ivel[1]+=-7*cos(cam_ang_yaw*(M_PI/180));
 					}
 					if(I_KeyDown(K_DOWNARROW) ||
 						I_KeyDown('s'))
 					{
-						cam_ivel[0]=-7*sin(cam_ang_yaw*(M_PI/180));
-						cam_ivel[1]= 7*cos(cam_ang_yaw*(M_PI/180));
+						cam_ivel[0]+=-7*sin(cam_ang_yaw*(M_PI/180));
+						cam_ivel[1]+= 7*cos(cam_ang_yaw*(M_PI/180));
 					}
 				}
 				
@@ -1979,15 +2176,15 @@ int main(int argc, char *argv[])
 						I_KeyDown('a') ||
 						I_KeyDown('A'))
 					{
-						cam_ivel[0]=-7*cos(cam_ang_yaw*(M_PI/180));
-						cam_ivel[1]=-7*sin(cam_ang_yaw*(M_PI/180));
+						cam_ivel[0]+=-7*cos(cam_ang_yaw*(M_PI/180));
+						cam_ivel[1]+=-7*sin(cam_ang_yaw*(M_PI/180));
 					}
 					if(I_KeyDown(K_RIGHTARROW) ||
 						I_KeyDown('d') ||
 						I_KeyDown('D'))
 					{
-						cam_ivel[0]= 7*cos(cam_ang_yaw*(M_PI/180));
-						cam_ivel[1]= 7*sin(cam_ang_yaw*(M_PI/180));
+						cam_ivel[0]+= 7*cos(cam_ang_yaw*(M_PI/180));
+						cam_ivel[1]+= 7*sin(cam_ang_yaw*(M_PI/180));
 					}
 				}
 

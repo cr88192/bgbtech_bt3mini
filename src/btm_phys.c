@@ -177,8 +177,10 @@ int BTM_CheckWorldMovePoint(BTM_World *wrl, float *org)
 int BTM_CheckWorldMoveSpot(BTM_World *wrl,
 	const float *org, const float *bbox, const float *vel)
 {
+	BTM_MobEntity *mlst, *mcur;
 	int cont;
 	int cxm, cxn, cym, cyn, czm, czn, cza;
+	u64 cpos;
 	u32 blk0, blk1, blk2, blk3;
 	u32 blk4, blk5, blk6, blk7;
 	int noenpts, ax;
@@ -200,6 +202,24 @@ int BTM_CheckWorldMoveSpot(BTM_World *wrl,
 	czn=floor(org[2]+bbox[5]);
 	cza=floor(org[2]+(bbox[2]+bbox[5])*0.5);
 
+	cont=0;
+
+//	if(!wrl->move_selfent)
+	if(1)
+	{
+//		mlst=BTM_QueryWorldEntitiesForBox(wrl, NULL,
+//			cxm-1, cym-1, czm-1, cxn+1, cyn+1, czn+1,
+//			wrl->move_selfent);
+		mlst=wrl->move_mqlist;
+		mcur=mlst;
+		while(mcur)
+		{
+			if(BTM_CheckBoxCollideMob(wrl, mcur, org, bbox))
+				{ cont|=1; }
+			mcur=mcur->chn_bpos;
+		}
+	}
+
 	if(fabs(vel[0])>fabs(vel[2]))
 	{
 		if(fabs(vel[0])>fabs(vel[1]))
@@ -216,7 +236,7 @@ int BTM_CheckWorldMoveSpot(BTM_World *wrl,
 
 	if((cxm==cxn) && (cym==cyn))
 	{
-		cont=0;
+//		cont=0;
 		blk0=BTM_GetWorldBlockXYZ(wrl, cxm, cym, czm);
 		blk1=BTM_GetWorldBlockXYZ(wrl, cxm, cym, czn);
 
@@ -279,10 +299,12 @@ int BTM_CheckWorldMoveSpot(BTM_World *wrl,
 				{ noenpts|=0xFF0; }
 		}
 
+		noenpts=0;
+
 	//	blk0=BTM_GetWorldBlockXYZ(wrl, org[0], org[1], org[2]-2);
 	//	blk1=BTM_GetWorldBlockXYZ(wrl, org[0], org[1], org[2]-1);
 
-		cont=0;
+//		cont=0;
 
 		if(!(noenpts&0x01))
 		{
@@ -353,9 +375,13 @@ int BTM_CheckWorldMoveSpot(BTM_World *wrl,
 #endif
 	}
 
+	if(cont&1)
+		return(cont);
+
 	if(cont&16)
 	{
-		cont=0;
+//		cont=0;
+		cont&=~16;
 		
 		cont|=BTM_CheckWorldMoveBBoxBlockContents(
 			wrl, org, bbox, cxm, cym, czm);
@@ -400,10 +426,20 @@ int BTM_CheckWorldBoxMoveVel(BTM_World *wrl, float dt,
 {
 	float tdo[4], tdv[4];
 	float f, g;
+	int cxm, cym, czm, cxn, cyn, czn;
 	int fl, cfl, cfl1;
 	int i, j, k;
 
 	f=fabs(svel[0])+fabs(svel[1])+fabs(svel[2]);
+
+	
+	TKRA_Vec3F_Zero(tdv);
+	cfl=BTM_CheckWorldMoveSpot(wrl, sorg, bbox, tdv);
+	if(cfl&1)
+	{
+		return(3);
+	}
+
 
 //	if(dt>0.1)
 	if((dt>0.1) || ((f*dt)>=0.25))
@@ -421,6 +457,20 @@ int BTM_CheckWorldBoxMoveVel(BTM_World *wrl, float dt,
 
 	if(svel[2]>0)
 		fl&=~1;
+
+	cxm=floor(sorg[0]+bbox[0]);
+	cxn=floor(sorg[0]+bbox[3]);
+	cym=floor(sorg[1]+bbox[1]);
+	cyn=floor(sorg[1]+bbox[4]);
+
+	czm=floor(sorg[2]+bbox[2]);
+	czn=floor(sorg[2]+bbox[5]);
+//	cza=floor(sorg[2]+(bbox[2]+bbox[5])*0.5);
+
+	wrl->move_mqlist=
+		BTM_QueryWorldEntitiesForBox(wrl, NULL,
+			cxm-1, cym-1, czm-1, cxn+1, cyn+1, czn+1,
+			wrl->move_selfent);
 
 	cfl=BTM_CheckWorldMoveSpot(wrl, tdo, bbox, svel);
 
@@ -638,7 +688,7 @@ int BTM_CheckWorldMoveVelSz(BTM_World *wrl, float dt,
 	
 	box[0]=-xrad;	box[1]=-xrad;
 	box[3]= xrad;	box[4]= xrad;
-	box[2]=-zofs;	box[4]=-zofs+zrad;
+	box[2]=-zofs;	box[5]=-zofs+zrad;
 	
 	return(BTM_CheckWorldBoxMoveVel(wrl, dt,
 		sorg, svel, box, dorg, dvel, rfl));

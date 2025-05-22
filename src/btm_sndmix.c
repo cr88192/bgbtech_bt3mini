@@ -124,13 +124,91 @@ int TKM_RebuildMixFir()
 	return(0);
 }
 
+static int bgbmid_ima_index_table[16] = {
+  -1, -1, -1, -1, 2, 4, 6, 8,
+  -1, -1, -1, -1, 2, 4, 6, 8
+}; 
+
+//static int bgbmid_ima_step_table[89] = { 
+static int bgbmid_ima_step_table[128] = { 
+     7,     8,     9,    10,    11,    12,    13,    14,    16,    17, 
+    19,    21,    23,    25,    28,    31,    34,    37,    41,    45, 
+    50,    55,    60,    66,    73,    80,    88,    97,   107,   118, 
+   130,   143,   157,   173,   190,   209,   230,   253,   279,   307,
+   337,   371,   408,   449,   494,   544,   598,   658,   724,   796,
+   876,   963,  1060,  1166,  1282,  1411,  1552,  1707,  1878,  2066, 
+  2272,  2499,  2749,  3024,  3327,  3660,  4026,  4428,  4871,  5358,
+  5894,  6484,  7132,  7845,  8630,  9493, 10442, 11487, 12635, 13899, 
+ 15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767 
+};
+
+void TkMod_MsImaAdpcm_DecodeBlockMono(
+	byte *ibuf, s16 *obuf, int len)
+{
+	int pred, index, step, diff, uni, sni;
+	int i, j;
+	
+	pred=(s16)(ibuf[0]+(ibuf[1]<<8));
+	index=ibuf[2];
+	
+	step=bgbmid_ima_step_table[index&127];
+
+	for(i=0; i<len; i++)
+	{
+		j=(ibuf[4+(i>>1)]>>((i&1)*4))&15;
+		uni=j;
+		sni=(j&8)?(-(j&7)):(j&7);
+	
+		index=index+bgbmid_ima_index_table[uni];
+		index=(index<0)?0:((index>88)?88:index);
+		diff=((2*(uni&7)+1)*step)/8;
+		if(uni&8)diff=-diff;
+		pred=pred+diff;
+		step=bgbmid_ima_step_table[index];
+
+		pred=(pred<(-32768))?(-32768):((pred>32767)?32767:pred);
+		obuf[i]=pred;
+	}
+}
+
+void TkMod_MsImaAdpcm_DecodeBlockMono2b(
+	byte *ibuf, s16 *obuf, int len)
+{
+	int pred, index, step, diff, uni, sni;
+	int i, j;
+	
+	pred=(s16)(ibuf[0]+(ibuf[1]<<8));
+	index=ibuf[2];
+	
+	step=bgbmid_ima_step_table[index&127];
+
+	for(i=0; i<len; i++)
+	{
+		j=(ibuf[4+(i>>2)]>>((i&3)*2))&3;
+		uni=j;
+	
+		index=index+((uni&1)*3-1);
+		index=(index<0)?0:((index>88)?88:index);
+		diff=(step>>1)+((uni&1)*step);
+		if(uni&2)diff=-diff;
+		pred=pred+diff;
+		step=bgbmid_ima_step_table[index];
+
+		pred=(pred<(-32768))?(-32768):((pred>32767)?32767:pred);
+		obuf[i]=pred;
+	}
+}
+
 byte *TkMod_DecodeWavBuf(byte *ibuf, int ibsz, int *rlen)
 {
+	s16 tsbuf[2048];
 	byte *cs, *cse, *cs1;
 	byte *data, *ddat;
 	u32 fcc0, sz0, fcc1, dsz;
 	int chan, rate, bits, len, len1, ssz, ilen;
+	int szblk, nblk, blksz, blksz1;
 	int spos, sstep;
+	int i0, i1;
 	int i, j, k;
 	
 	fcc0=get_u32le(ibuf+0);
@@ -161,6 +239,7 @@ byte *TkMod_DecodeWavBuf(byte *ibuf, int ibsz, int *rlen)
 			chan=cs1[2];
 			rate=cs1[4]+(cs1[5]<<8);
 			bits=cs1[14];
+			szblk=cs1[12]+(cs1[13]<<8);
 		}
 
 		if(fcc0==FCC_data)
@@ -172,32 +251,75 @@ byte *TkMod_DecodeWavBuf(byte *ibuf, int ibsz, int *rlen)
 		cs+=8+((sz0+1)&(~1));
 	}
 	
-	ssz=(chan*bits)/8;
-	ilen=dsz/ssz;
-	
-	len=(ilen*16000)/rate;
-
-	sstep=(256*rate)/16000;
-	spos=0;
-	
-	len1=(len+511)&(~255);
-	
-	ddat=btm_malloc(len1);
-	memset(ddat, 128, len1);
-	
-	for(i=0; i<len; i++)
+	if((bits==8) || (bits==16))
 	{
-		j=(spos>>8);
-		spos+=sstep;
-		if(bits==16)
+		ssz=(chan*bits)/8;
+		ilen=dsz/ssz;
+		
+		len=(ilen*16000)/rate;
+
+		sstep=(256*rate)/16000;
+		spos=0;
+		
+		len1=(len+511)&(~255);
+		
+		ddat=btm_malloc(len1);
+		memset(ddat, 128, len1);
+		
+		for(i=0; i<len; i++)
 		{
-			k=(s16)(get_u16le(data+(j*ssz)));
-			k=(k>>8)+128;
-		}else
-		{
-			k=data[j*ssz];
+			j=(spos>>8);
+			spos+=sstep;
+			if(bits==16)
+			{
+				k=(s16)(get_u16le(data+(j*ssz)));
+				k=(k>>8)+128;
+			}else
+			{
+				k=data[j*ssz];
+			}
+			ddat[i]=k;
 		}
-		ddat[i]=k;
+	}
+
+	if((bits==4) ||	(bits==2))
+	{
+		nblk=dsz/szblk;
+		blksz=(szblk-4)*2;
+		if(bits==2)
+			blksz=(szblk-4)*4;
+		ilen=nblk*blksz;
+		
+		len=(ilen*16000)/rate;
+		blksz1=(blksz*16000)/rate;
+
+		sstep=(256*rate)/16000;
+		spos=0;
+		
+		len1=(len+511)&(~255);
+		
+		ddat=btm_malloc(len1);
+		memset(ddat, 128, len1);
+		
+		for(i0=0; i0<nblk; i0++)
+		{
+			if(bits==2)
+			{
+				TkMod_MsImaAdpcm_DecodeBlockMono2b(data+i0*szblk, tsbuf, blksz);
+			}else
+			{
+				TkMod_MsImaAdpcm_DecodeBlockMono(data+i0*szblk, tsbuf, blksz);
+			}
+			spos=0;
+			for(i=0; i<blksz1; i++)
+			{
+				j=(spos>>8);
+				spos+=sstep;
+				k=tsbuf[j];
+				k=(k>>8)+128;
+				ddat[i0*blksz1+i]=k;
+			}
+		}
 	}
 	
 	*rlen=len;

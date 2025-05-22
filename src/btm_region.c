@@ -534,6 +534,142 @@ int BTM_RegionAllocSpan(
 	return(i);
 }
 
+
+/* 0000..EFFF: Literal Values, F001..FFFF=RLE Run */
+int BTM_FlattenCmpRLE16(u16 *obuf, u16 *ibuf, int ibsz)
+{
+	u16 *cs, *cse, *ct;
+	int v, lc, lv;
+	
+	cs=ibuf; cse=ibuf+ibsz;
+	ct=obuf;
+	
+	lc=0; lv=-1;
+	while(cs<cse)
+	{
+		v=*cs++;
+		if(v==lv)
+		{
+//			if(lc==4095)
+			if(lc==255)
+			{
+				*ct++=0xF000+lc;
+				lc=0;
+			}
+			lc++;
+			continue;
+		}
+
+		if(lc>0)
+		{
+			*ct++=0xF000+lc;
+			lc=0;		
+		}
+		
+		if(v<0xF000)
+		{
+			*ct++=v;
+			lv=v;
+			continue;
+		}
+		*ct++=0xF000;
+		*ct++=v^0x8000;
+		lv=v;
+		continue;
+	}
+	
+	if(lc>0)
+	{
+		*ct++=0xF000+lc;
+		lc=0;		
+	}
+
+	return(ct-obuf);
+}
+
+int BTM_ExpandCmpRLE16(u16 *obuf, u16 *ibuf, int obsz)
+{
+	u16 *cs, *cte, *ct;
+	int v, lc, lv;
+	int i;
+	
+	cs=ibuf; ct=obuf; cte=obuf+obsz;
+	
+	lc=0; lv=-1;
+	while(ct<cte)
+	{
+		v=*cs++;
+		if(v<0xF000)
+		{
+			*ct++=v;
+			lv=v;
+			continue;
+		}
+		
+		if(v>0xF000)
+		{
+			i=v-0xF000;
+			while((ct<cte) && i--)
+				*ct++=lv;
+			continue;
+		}
+
+		/* Escaped value */
+		v=*cs++;
+		v^=0x8000;
+		*ct++=v;
+		lv=v;
+		continue;
+	}
+	
+	return(cs-ibuf);
+}
+
+int BTM_TryLoadRegionRosdat(BTM_World *wrl, BTM_Region *rgn)
+{
+	char tb[256];
+	byte *buf, *bmbuf, *sebuf, *lebuf;
+	int sz, bmsz, sesz, lesz, zrgn;
+	int rx, ry;
+	int i, j, k, n;
+
+	rx=(rgn->rgnix>>0)&511;
+	ry=(rgn->rgnix>>9)&511;
+	ry|=((rgn->rgnix>>18)&7)<<9;
+	sprintf(tb, "region/ro%03X%03X.dat", ry, rx);
+	printf("BTM_TryLoadRegionImage: %s\n", tb);
+	buf=BTM_LoadFileNp(tb, &sz);
+
+	if(!buf)
+		return(-1);
+
+	if(memcmp(buf, "BTMROS01", 8))
+		return(-1);
+
+	rgn->img_rosdat=buf;
+	rgn->img_rossz=sz;
+
+	rgn->ros_cels=BTM_WorldAllocSq(wrl, 11);
+	k=get_u32le(buf+(16+(6*4)));
+	memcpy(rgn->ros_cels, buf+((k&0xFFFFF)*16), 512*4);
+	
+	for(i=0; i<6; i++)
+	{
+		k=get_u32le(buf+(16+(i*4)));
+		if(!k)
+			continue;
+
+		if(!rgn->ros_maps[i])
+			rgn->ros_maps[i]=BTM_WorldAllocSq(wrl, 15);
+		BTM_ExpandCmpRLE16(
+			rgn->ros_maps[i],
+			(u16 *)(buf+((k&0xFFFFF)*16)),
+			128*128);
+	}
+	
+	return(0);
+}
+
 int BTM_TryLoadRegionImage(BTM_World *wrl, BTM_Region *rgn)
 {
 	char tb[256];
@@ -817,6 +953,8 @@ BTM_Region *BTM_GetRegionForRix(BTM_World *wrl, int rix)
 	rgn->next=wrl->region;
 	wrl->region=rgn;
 
+	BTM_TryLoadRegionRosdat(wrl, rgn);
+
 	BTM_TryLoadRegionImage(wrl, rgn);
 
 	wrl->rgn_luhash[h]=rgn;
@@ -833,6 +971,27 @@ int BTM_DestroyRegion(BTM_World *wrl, BTM_Region *rgn)
 	int i, j, k;
 	
 	printf("BTM_DestroyRegion: %05X\n", rgn->rgnix);
+
+	for(i=0; i<6; i++)
+	{
+		if(rgn->ros_maps[i])
+		{
+			BTM_WorldFreeSq(wrl, rgn->ros_maps[i], 15);
+			rgn->ros_maps[i]=NULL;
+		}
+	}
+
+	if(rgn->ros_cels)
+	{
+		BTM_WorldFreeSq(wrl, rgn->ros_cels, 11);
+		rgn->ros_cels=NULL;
+	}
+
+	if(rgn->img_rosdat)
+	{
+		BTM_FreeMul256B(rgn->img_rosdat, rgn->img_rossz>>8);
+		rgn->img_rosdat=NULL;
+	}
 
 	for(i=0; i<512; i++)
 	{
@@ -1642,6 +1801,203 @@ int BTM_ValidateRegionMagics(BTM_World *wrl, BTM_Region *rgn)
 	return(0);
 }
 
+int BTM_FlattenRegionRosdat(BTM_World *wrl, BTM_Region *rgn)
+{
+	static u16 *tcbuf=NULL;
+	static u16 *tdbuf=NULL;
+	char tb[256];
+	byte *buf, *buf2;
+	u16 *map;
+	u64 rcix, blk, lblk, blk0;
+	int sz, ofs, cix;
+	int bx, by, bz, pl;
+	int cx, cy, cz, bn;
+	int rx, ry, sz0, sz1;
+	int i, j, k;
+
+	if(!(rgn->dirty&1))
+		return(0);
+
+	if(!rgn->ros_cels)
+	{
+//		rgn->ros_cels=btm_malloc(512*4);
+		rgn->ros_cels=BTM_WorldAllocSq(wrl, 11);
+		
+		for(i=0; i<5; i++)
+		{
+//			rgn->ros_maps[i]=btm_malloc(128*128*2);
+			rgn->ros_maps[i]=BTM_WorldAllocSq(wrl, 15);
+		}
+	}
+
+	rgn->ros_ncels=2;
+	rgn->ros_cels[0]=0x00000000U;
+	rgn->ros_cels[1]=0x00000F00U;
+
+	for(pl=5; pl>=0; pl--)
+	{
+		if(!rgn->ros_maps[pl])
+			continue;
+		for(by=0; by<128; by++)
+			for(bx=0; bx<128; bx++)
+		{
+			lblk=0;
+			for(bz=0; bz<128; bz++)
+			{
+				switch(pl)
+				{
+					case 0:		cx=127-bz;	cy=bx;	cz=by;	break;
+					case 1:		cx=    bz;	cy=bx;	cz=by;	break;
+					case 2:		cx=bx;	cy=127-bz;	cz=by;	break;
+					case 3:		cx=bx;	cy=    bz;	cz=by;	break;
+					case 4:		cx=bx;	cy=by;	cz=127-bz;	break;
+					case 5:		cx=bx;	cy=by;	cz=    bz;	break;
+				}
+			
+				rcix=BTM_BlockCoordsToRcix(cx, cy, cz);
+				cix=BTM_Rcix2Cix(rcix);
+				blk=BTM_GetRegionBlockCix(wrl, rgn, cix);
+				blk0=blk;
+
+//				blk&=0xFFF0FFFFU;
+//				blk|=1<<29;
+
+				/* copy lighting from adjacent air block. */
+				blk=
+//					( blk&0xFF000FFFU) |
+					( blk&0x00000FFFU) |
+					(lblk&0x00F0F000U) ;
+
+				/* assume opposite side is not visible */
+//				blk|=1U<<(24+(pl^1));
+
+				if((bz==0) && (blk&(1U<<(24+pl))))
+				{
+					/* can't see this block, so make it a void variant. */
+					blk=0x00000F00U;
+					rgn->ros_maps[pl][by*128+bx]=1;
+				}
+
+				if((blk&255)>=4)
+				{
+					for(bn=0; bn<rgn->ros_ncels; bn++)
+						if(rgn->ros_cels[bn]==blk)
+							break;
+					if((bn>=rgn->ros_ncels) && (bn<512))
+					{
+						bn=rgn->ros_ncels++;
+						rgn->ros_cels[bn]=blk;
+					}
+					if(bn>=512)
+						bn=0;
+					
+					rgn->ros_maps[pl][by*128+bx]=bn|(bz<<9);
+					break;
+				}
+				lblk=blk0;
+			}
+			if(bz>=128)
+			{
+				rgn->ros_maps[pl][by*128+bx]=(127<<9)|0;
+			}
+		}
+	}
+
+
+	buf=rgn->img_rosdat;
+	if(!buf)
+	{
+		sz=64+(512*4)+(5*128*128*2);
+		sz0=(sz+255)>>8;
+		sz=sz0<<8;
+		
+		buf=BTM_AllocMul256B(sz0);
+		memset(buf, 0, sz);
+		
+		rgn->img_rosdat=buf;
+		rgn->img_rossz=sz;
+		
+		memcpy(buf, "BTMROS01", 8);
+		set_u32le(buf+8, sz);
+	}
+
+	if(!tcbuf)
+	{
+//		tcbuf=btm_malloc(1<<18);
+		tcbuf=btm_malloc(1<<16);
+
+		tdbuf=btm_malloc(1<<15);
+	}
+	
+	ofs=64;
+
+	bn=rgn->ros_ncels;
+	memcpy(buf+ofs, rgn->ros_cels, bn*4);
+	set_u32le(buf+(16+(6*4)), ofs>>4);
+	ofs+=bn*4;
+
+//	memcpy(tcbuf, buf, 64);
+//	sz0=rgn->img_rossz;
+//	sz1=64+(sz1<<1);
+	
+	ofs=(ofs+15)&(~15);
+
+	for(i=0; i<6; i++)
+	{
+		map=rgn->ros_maps[i];
+		if(!map)
+			continue;
+	
+		sz1=BTM_FlattenCmpRLE16(
+			(u16 *)tcbuf, map, 128*128);
+		
+		BTM_ExpandCmpRLE16(tdbuf, tcbuf, 128*128);
+		
+		if(memcmp(map, tdbuf, 128*128*2))
+		{
+			for(k=0; k<128*128; k++)
+				if(map[k]!=tdbuf[k])
+					break;
+			__debugbreak();
+		}
+		
+		if((ofs+(sz1*2))>rgn->img_rossz)
+		{
+			k=rgn->img_rossz;
+			while((ofs+(sz1*2))>=k)
+				k=k+(k>>1);
+			k=(k+255)&(~255);
+			buf=btm_realloc(buf, k);
+			rgn->img_rosdat=buf;
+			rgn->img_rossz=k;
+		}
+
+		memcpy(buf+ofs, tcbuf, sz1*2);
+		set_u32le(buf+(16+(i*4)), ofs>>4);
+		ofs+=sz1*2;
+		ofs=(ofs+15)&(~15);
+	}
+	
+	ofs=(ofs+255)&(~255);
+
+	buf=rgn->img_rosdat;
+	if(buf)
+	{
+		set_u32le(buf+8, ofs);
+
+		rx=(rgn->rgnix>>0)&511;
+		ry=(rgn->rgnix>>9)&511;
+		ry|=((rgn->rgnix>>18)&7)<<9;
+
+		sprintf(tb, "region/ro%03X%03X.dat", ry, rx);
+//		BTM_StoreFile(tb, buf, rgn->img_rossz);
+		BTM_StoreFile(tb, buf, ofs);
+//		BTM_StoreFile(tb, tcbuf, sz1);
+	}
+	
+	return(0);
+}
+
 int BTM_FlattenRegion(BTM_World *wrl, BTM_Region *rgn)
 {
 	static byte *tentbuf=NULL;
@@ -1660,7 +2016,15 @@ int BTM_FlattenRegion(BTM_World *wrl, BTM_Region *rgn)
 
 	/* New region, not yet visited. */
 	if((rgn->dirty&4) && !(rgn->dirty&2))
+	{
+		/* still save outline. */
+		if(!(rgn->dirty&8))
+		{
+			BTM_FlattenRegionRosdat(wrl, rgn);
+			rgn->dirty|=8;
+		}
 		return(0);
+	}
 	
 	if(!rgn->voxa[0] && !rgn->chk_ofsz[0])
 	{
@@ -1743,6 +2107,8 @@ int BTM_FlattenRegion(BTM_World *wrl, BTM_Region *rgn)
 					(void *)(rgn->voxbm), 128*128*128/8);
 			}
 		}
+		
+		BTM_FlattenRegionRosdat(wrl, rgn);
 	}
 
 	if(rgn->dirty&16)
@@ -1818,7 +2184,6 @@ int BTM_FlattenRegion(BTM_World *wrl, BTM_Region *rgn)
 
 	sz=rgn->img_lnzcell*16;
 	BTM_StoreFile(tb, buf, sz);
-	
 	return(0);
 }
 
@@ -2002,6 +2367,193 @@ u32 BTM_GetRegionBlockCix(BTM_World *wrl, BTM_Region *rgn, int cix)
 
 	blk=vox[cix&4095];
 //	blk=rgn->vox[cix];
+	return(blk);
+}
+
+u32 BTM_GetRegionBlockCoords(BTM_World *wrl, BTM_Region *rgn,
+	int cx, int cy, int cz)
+{
+	u64 rcix;
+	int cix;
+
+	rcix=BTM_BlockCoordsToRcix(cx, cy, cz);
+	cix=BTM_Rcix2Cix(rcix);
+	return(BTM_GetRegionBlockCix(wrl, rgn, cix));
+}
+
+/* Called if it isn't particularly importanrt if we get the correct block.
+ * So, may instead give an exterior-only view of a region to sidestep chunk loading.
+ */
+u32 BTM_WeakGetRegionBlockCix(BTM_World *wrl, BTM_Region *rgn, int cix)
+{
+	u32 *vox;
+	u16 *map;
+	u32 blk, blk1;
+	u64 bpos;
+	int cx, cy, cz, pl, bx, by, bz;
+	int ch, vi, vx, vy, vz, dx, dy, d, vnz;
+	int j0, j1, j2, j3;
+	int i0, im;
+	int i, j, k;
+
+	if(cix>>21)
+		{ __debugbreak(); }
+
+	ch=(cix>>12)&511;
+	vox=rgn->voxa[ch];
+	if(!vox)
+//	if(1)
+	{
+		bpos=BTM_ConvRcixToBlkPos(cix);
+		cx=(bpos>> 0)&127;
+		cy=(bpos>>16)&127;
+		cz=(bpos>>32)&127;
+	
+		map=rgn->ros_maps[4];
+		if(map)
+		{
+			i0=cy*128+cx;
+			vi=map[i0];
+			vnz=(vi>>9);
+			vz=127-vnz;
+			if(cz>vz)
+				return(BTM_BLKPAT_AIR3_DFL);
+			if((vi&511)>=2)
+			{
+				if(cz==vz)
+				{
+					blk=rgn->ros_cels[vi&511];
+					blk|=1<<29;
+
+					j0=map[(i0-  1)&16383];
+					j1=map[(i0+  1)&16383];
+					j2=map[(i0-128)&16383];
+					j3=map[(i0+128)&16383];
+
+					if((j0>>9)<=vnz)	blk|=1<<25;
+					if((j1>>9)<=vnz)	blk|=1<<24;
+					if((j2>>9)<=vnz)	blk|=1<<27;
+					if((j3>>9)<=vnz)	blk|=1<<26;
+					
+					blk|=1U<<30;
+					return(blk);
+				}
+			}
+		}
+		
+//		for(pl=0; pl<4; pl++)
+		for(pl=3; pl>=0; pl--)
+		{
+			switch(pl)
+			{
+				case 0:		bx=cy;	by=cz;	bz=    cx;	break;
+				case 1:		bx=cy;	by=cz;	bz=127-cx;	break;
+				case 2:		bx=cx;	by=cz;	bz=    cy;	break;
+				case 3:		bx=cx;	by=cz;	bz=127-cy;	break;
+				case 4:		bx=cx;	by=cy;	bz=    cz;	break;
+			}
+
+			map=rgn->ros_maps[pl];
+			if(map)
+			{
+				i0=by*128+bx;
+				vi=map[i0];
+				vz=127-(vi>>9);
+				if(bz==(vz+1))
+				{
+					blk=BTM_BLKTY_AIR2;
+					blk1=rgn->ros_cels[vi&511];
+					blk|=blk1&0x00F0F000U;
+					blk|=1U<<30;
+					return(blk);
+				}
+				if((vi&511)>=2)
+				{
+					if(bz==vz)
+					{
+						blk=rgn->ros_cels[vi&511];
+						blk|=1<<(24+(pl^1));
+						blk|=1U<<30;
+
+						blk|=1U<<(24+4);
+						blk|=1U<<(24+5);
+
+						vx=map[(i0-1)&16383];
+						vy=map[(i0+1)&16383];
+						if(pl&2)
+						{
+							if((vx>>9)<=(vi>>9))	blk|=1<<25;
+							if((vy>>9)<=(vi>>9))	blk|=1<<24;
+						}else
+						{
+							if((vx>>9)<=(vi>>9))	blk|=1<<27;
+							if((vy>>9)<=(vi>>9))	blk|=1<<26;
+						}
+
+						return(blk);
+					}
+				}
+			}
+		}
+
+//		for(pl=0; pl<4; pl++)
+		for(pl=3; pl>=0; pl--)
+		{
+			switch(pl)
+			{
+				case 0:		bx=cy;	by=cz;	bz=    cx;	break;
+				case 1:		bx=cy;	by=cz;	bz=127-cx;	break;
+				case 2:		bx=cx;	by=cz;	bz=    cy;	break;
+				case 3:		bx=cx;	by=cz;	bz=127-cy;	break;
+				case 4:		bx=cx;	by=cy;	bz=    cz;	break;
+			}
+			map=rgn->ros_maps[pl];
+			if(map)
+			{
+				vi=map[by*128+bx];
+				vz=127-(vi>>9);
+				if(bz>vz)
+				{
+					blk=BTM_BLKTY_AIR2;
+					blk|=1U<<30;
+					return(blk);
+				}
+			}
+		}
+
+		vx=(wrl->cam_org>> 8)&0xFFFF;
+		vy=(wrl->cam_org>>32)&0xFFFF;
+
+//		bpos=BTM_ConvRixToBlkPosCenter(rgn->rgnix);
+//		cx=(bpos>> 0)&65535;
+//		cy=(bpos>>16)&65535;
+
+		dx=(s16)(vx-cx);
+		dy=(s16)(vy-cy);
+		dx=dx^(dx>>31);
+		dy=dy^(dy>>31);
+		if(dx>dy)
+			d=dx+(dy>>1);
+		else
+			d=dy+(dx>>1);
+
+//		if(d>96)
+//		if(d>(btm_drawdist>>1))
+		if(d>=(wrl->drawfar))
+		{
+//			return(BTM_BLKTY_STONE|0x3F000000);
+			return(BTM_BLKTY_STONE|0x7F000000);
+		}
+
+//		return(BTM_BLKTY_STONE|0x3F000000);
+	}
+
+	blk=BTM_GetRegionBlockCix(wrl, rgn, cix);
+
+	if(rgn->chkraix[ch]>=256)
+		blk|=1U<<31;
+
+//	return(BTM_BLKTY_STONE);
 	return(blk);
 }
 

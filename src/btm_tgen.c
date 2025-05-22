@@ -1107,7 +1107,7 @@ int BTM_InstanceStructureNodeAt(BTM_World *wrl,
 	char *otop;
 	u32 blk, rpblk;
 	int ovspos, ovsmark;
-	int na, ci, cp;
+	int na, ci, cp, yaw;
 	int mx, my, mz, nx, ny, nz, cx, cy, cz;
 
 	if(!node)
@@ -1209,6 +1209,9 @@ int BTM_InstanceStructureNodeAt(BTM_World *wrl,
 			BTM_RemoveWorldEntitiesInBox(wrl, s0,
 				bcx+mx, bcy+my, bcz+mz,
 				bcx+nx, bcy+ny, bcz+nz);
+			BTM_RemoveWorldEntitiesInBox(wrl, s0,
+				bcx+mx, bcy+my, bcz+mz,
+				bcx+nx, bcy+ny, bcz+nz);
 		}
 		return(0);
 	}
@@ -1218,6 +1221,13 @@ int BTM_InstanceStructureNodeAt(BTM_World *wrl,
 		cx=BTM_InstGetNodeAttrInt(wrl, node, "org_x");
 		cy=BTM_InstGetNodeAttrInt(wrl, node, "org_y");
 		cz=BTM_InstGetNodeAttrInt(wrl, node, "org_z");
+		yaw=BTM_InstGetNodeAttrInt(wrl, node, "yaw");
+
+		s0=BCCX_Get(node, "classname");
+		if(!strcmp(s0, "prop"))
+		{
+			cp=-1;
+		}
 
 		c=BCCX_Clone(node);
 		BCCX_SetTag(c, "mobj");

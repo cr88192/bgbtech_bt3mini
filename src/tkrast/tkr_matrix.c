@@ -130,6 +130,13 @@ float TKRA_Vec4F_Normalize(float *a, float *b)
 	return(f);
 }
 
+void TKRA_Vec3F_CrossProduct(float *a, float *b, float *c)
+{
+	c[0]=(a[1]*b[2])-(a[2]*b[1]);
+	c[1]=(a[2]*b[0])-(a[0]*b[2]);
+	c[2]=(a[0]*b[1])-(a[1]*b[0]);
+}
+
 void TKRA_Mat4F_AxisTo4MatrixT(float *a, float th, float *b)
 {
 	float xx, xy, xz, xw, xv, yy, yz, yw, yv, zz, zw, zv, ww, wv;

@@ -183,8 +183,15 @@ typedef int64_t	s64;
 #define BTM_BLKTY_CARROTS			0x53
 #define BTM_BLKTY_BEETS				0x54
 #define BTM_BLKTY_POTATOES			0x55
-#define BTM_BLKTY_PUMPKIN_VINE		0x55
-#define BTM_BLKTY_MELLON_VINE		0x56
+#define BTM_BLKTY_PUMPKIN_VINE		0x56
+#define BTM_BLKTY_MELLON_VINE		0x57
+
+#define BTM_BLKTY_PLANKS3			0x58
+#define BTM_BLKTY_PLANKS4			0x59
+
+#define BTM_BLKTY_SCONCE			0x5A
+
+#define BTM_BLKPAT_AIR3_DFL			0x00F00003	/* Open Air, Sky */
 
 #define BTM_BLKDFL_NODRAW		0x01000000U		//Not Drawn
 #define BTM_BLKDFL_SEETHRU		0x02000000U		//Does not block visibility.
@@ -223,6 +230,10 @@ typedef int64_t	s64;
 
 #ifndef BTM_TARGET_DRAWDIST
 #define BTM_TARGET_DRAWDIST	128
+// #define BTM_HITEXPAMD		3
+// #define BTM_HITEXPAMD		4
+// #define BTM_HITEXPAMD		5
+// #define BTM_HITEXPAMD		7
 #endif
 
 #define BRM_VART16_SMALLLIT		0x1000ULL
@@ -287,9 +298,30 @@ typedef struct BTM_MobSprite_s BTM_MobSprite;
 // #define	BTM_RAYCAST_MAXHITS			131072
 #define	BTM_RAYCAST_MAXHITS			262144
 // #define	BTM_RAYCAST_HASHSZ			1024
-#define	BTM_RAYCAST_HASHSZ			4096
+// #define	BTM_RAYCAST_HASHSZ			4096
+#define	BTM_RAYCAST_HASHSZ			16384
 
 #endif
+
+#define BTM_MOVETYPE_NONE	0
+#define BTM_MOVETYPE_SLIDE	1
+
+#define BTM_SOLIDTYPE_NONE		0	//non-solid
+#define BTM_SOLIDTYPE_MOB		1	//mob-like
+#define BTM_SOLIDTYPE_MODEL		2	//solid comes from 3D model
+
+#define BTM_INVEN_NOTHING		0
+#define BTM_INVEN_CUBE			1
+#define BTM_INVEN_COIN			2
+#define BTM_INVEN_CYLINDER		3
+#define BTM_INVEN_MILK			4
+#define BTM_INVEN_COOKIE		5
+#define BTM_INVEN_SCROLL		6
+#define BTM_INVEN_PEANUTBUTTER	7
+
+#define BTM_INVEN_JUNK			0x1000
+#define BTM_INVEN_PBJUNK		0x2000
+
 
 struct BTM_World_s {
 // u32		*vox;
@@ -314,6 +346,9 @@ u32	magic2;
 BTM_MobEntity	*free_mobent;
 
 BTM_MobEntity	*nearby_mobent;
+
+BTM_MobEntity	*move_selfent;		//current entity trying to move
+BTM_MobEntity	*move_mqlist;		//list of queried ents for move
 
 void	*mm_p2alloc[20];
 
@@ -355,6 +390,9 @@ int		daytimer;
 short	day;
 byte	daylight;
 byte	dodaytimer;
+
+int			drawnear;
+int			drawfar;
 
 BTM_TexImg	*texlist[256];
 
@@ -430,6 +468,10 @@ u16			voxbmix[512];	//voxel bitmap, index
 u32			magic3;
 u64			*voxbm;			//voxel bitmap, bits
 
+byte		chkhit[512];	//chunk hit by raycast
+byte		facehit[192];	//faces hit by raycast
+u16			chkraix[512];	//chunk render arrays.
+
 int			rgnix;
 u32			rgnvseq;		//region version sequence
 
@@ -451,6 +493,13 @@ BTM_MobEntity	*live_entity;
 
 BTM_MobEntity	*live_entity_hash[256];		//hash for block position
 u32			magic5;
+
+byte		*img_rosdat;
+int			img_rossz;
+u32			*ros_cels;
+u16			*ros_maps[6];
+int			ros_mapofs[6];
+u16			ros_ncels;
 };
 
 struct BTM_MobEntity_s {
@@ -487,6 +536,9 @@ s16				ivel_z;
 byte			rad_x;
 byte			rad_z;
 byte			rad_ofs_z;
+
+byte			movetype;
+byte			solidtype;
 
 u64				spos;
 u64				bpos;
@@ -609,6 +661,9 @@ int n_mesh;
 int n_lod;
 int n_bone;
 int n_anim;
+
+byte *slab[256];
+int nslab, slabpos;
 };
 
 struct BTM_BtModelMesh_s {
@@ -618,10 +673,13 @@ float *v_nv;
 byte *v_bn;
 u32 *v_cl;
 u16 *tris;
+float *tri_nv;
 char *matname;
 u32 baseclr;
 int n_vtx;
 int n_tri;
+
+float bbox[6];
 };
 
 struct BTM_BtModelBone_s {
@@ -645,6 +703,14 @@ byte framerate;
 
 #define		btm_malloc(sz)	btm_malloc_lln(sz, __FILE__, __LINE__)
 #define		btm_realloc(ptr, sz)	btm_realloc_lln(ptr, sz, __FILE__, __LINE__)
+
+#define		btm_malloc_va(sz)	\
+	btm_malloc_va_lln(sz, __FILE__, __LINE__)
+#define		btm_realloc_va(ptr, sz)	\
+	btm_realloc_va_lln(ptr, sz, __FILE__, __LINE__)
+
+#define		BTM_WorldAllocSq(wrl,pidx)	\
+	BTM_WorldAllocSqLln(wrl,pidx,__FILE__, __LINE__)
 
 
 #define BTMGL_FOURCC(a, b, c, d)	((a)|((b)<<8)|((c)<<16)|((d)<<24))
@@ -694,6 +760,14 @@ void *btm_malloc_lln(int sz, char *lfn, int lln);
 void *btm_realloc_lln(void *ptr, int sz, char *lfn, int lln);
 void btm_free(void *ptr);
 
+void *btm_malloc_va_lln(int sz, char *lfn, int lln);
+void *btm_realloc_va_lln(void *ptr, int sz, char *lfn, int lln);
+
 BTM_BtModel *BTM_BmdLoadModelBuffer(byte *buf, int sz);
+
+BTM_MobEntity *BTM_QueryWorldEntitiesForBox(
+	BTM_World *wrl, BTM_MobEntity *slst,
+	int mcx, int mcy, int mcz, int ncx, int ncy, int ncz,
+	BTM_MobEntity *ignore);
 
 #endif

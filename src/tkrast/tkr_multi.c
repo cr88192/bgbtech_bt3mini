@@ -6,6 +6,8 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <GL/gl.h>
+// #include <GL/glext.h>
+#include "GL/glext.h"
 #else
 #include "tkr_glconst.h"
 #endif
